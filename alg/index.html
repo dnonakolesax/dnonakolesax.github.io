@@ -1,0 +1,1757 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>leetbase</title>
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.1/styles/github.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 10px 0 10px 0;
+        }
+        #html-output {
+            margin-bottom: 20px;
+			margin-left: auto;
+			margin-right: auto;
+			width: 40vw;
+			border: 1px solid gray;
+			border-radius:12px;
+			padding-left: 10px;
+			padding-right: 10px;
+        }
+		
+		@media (max-width: 768px) {
+			#html-output {
+				width: 90vw !important;
+			}
+		}
+    </style>
+</head>
+<body>
+    <div id="html-output"></div>
+	<script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/marked-highlight/lib/index.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.1/highlight.min.js"></script>
+    <script>
+        function convertMarkdown() {
+			const { Marked } = globalThis.marked;
+			const { markedHighlight } = globalThis.markedHighlight;
+            const markdown = `
+# База по литкоду
+
+Здесь собраны почти все базовые задачи с литкода
+
+Здесь нет:
+
+- Ручной реализации сортировок
+- Ручной реализации деревьев (АВЛ / КЧ / Косые / ...)
+- Lock-free структур
+- Паралелльных алгоритмов
+
+Т. е. все задачи именно на применение струткур данных, а не на ручную реализацию известных.
+
+# Список задач
+
+## Односвязные списки
+- [Слияние k отсортированных односвязных списков](#merge-k-sorted-lists)
+- [Поиск цикла в односвязном списке](#linked-list-cycle)
+- [Сложение двух чисел, заданных односвязными списками](#add-two-numbers)
+- [Реверс односвязного списка](#reverse-linked-list)
+
+## Двоичный поиск 
+- [Двоичный поиск](#binary-search)
+- [Угадывание числа](#guess-number-higher-or-lower)
+- [Поиск в двумерном массиве](#search-a-2d-matrix)
+- [Поиск в смещённом отсортированном масиве](#search-in-rotated-sorted-array)
+- [Поиск минимума в смещённом отсортированном масиве](#find-minimum-in-rotated-sorted-array)
+ 
+## hash table:
+- [Единственное число](#single-number) - решить за O(1) по памяти
+- [Сумма двух](#two-sum)
+- [Сумма четырёх](#4sum)
+- [Группировка анаграм](#group-anagrams)
+- [Валидные анаграмы](#valid-anagram)
+- [Все анаграмы в строке](#find-all-anagrams-in-a-string)
+
+## queue/stack:
+- [Валидные скобки](#valid-parentheses)
+
+## dfs/bfs:
+- [Количество островов](#number-of-islands)
+- [Убрать некорректные скобки](#remove-invalid-parentheses)
+ 
+## sort:
+- [Слияние интервалов](#merge-intervals)
+ 
+## heap/hash:
+- [K самых популярных слов](#top-k-frequent-words)
+- [K самых популярных элементов](#top-k-frequent-elements)
+ 
+## two pointers:
+- [Самый большой контейнер](#container-with-most-water)
+- [Индексы разделений](#partition-labels)
+ 
+## sliding window:
+- [Самая длинная последовательность (с k заменами)](#longest-repeating-character-replacement)
+ 
+## tree:
+- [Одинаковые деревья](#same-tree)
+- [Симметричное дерево](#symmetric-tree)
+- [Проверка на сбалансированность](#balanced-binary-tree)
+- [Пути к сумме](#path-sum-ii)
+
+## greedy problems:
+- [Лучшее время покупки и продажи акций](#best-time-to-buy-and-sell-stock)
+
+# Решения
+
+## Односвязные списки
+
+### Merge k sorted lists
+
+[Ссылка](https://leetcode.com/problems/merge-k-sorted-lists/) 
+
+#### Постановка задачи
+
+Дано k отсортированных односвязных списков. Необходимо слить их в один (тоже отсортированный).
+
+Пример:
+
+\`\`\`js
+Input: lists = [[1,4,5],[1,3,4],[2,6]]
+Output: [1,1,2,3,4,4,5,6]
+\`\`\`
+
+#### Решение в лоб 
+
+Описание элемента односвязного списка имеет вид:
+
+\`\`\`go
+ type ListNode struct {
+    Val int
+    Next *ListNode
+ }
+ \`\`\`
+
+На вход поступает массив указателей на первые элементы списков. 
+Первым делом найдём элемент, который должен стать головой. Для этого перебираем все указатели на первые элементы и ищем минимальный. Паралелльно ведём счётчик указателей равных nil. Если их столько же, сколько и всего в массиве - завершаем работу. Если мы забираем какой-либо элемент из списка, указатель на голову надо подвинуть на Next.
+
+\`\`\`go
+func mergeKLists(lists []*ListNode) *ListNode {
+    // Если массив пустой - вернуть nil
+    if (len(lists) == 0) {
+        return nil
+    }
+
+    // Здесь мы будем хранить текущий элемент и голову, а также количество пустых списков
+    var head *ListNode; 
+    var curr *ListNode = nil;
+    var emptyCount = 0;
+
+    // Здесь мы будем хранить сведения о минимальном на данном этапе значении
+    var minVal int = 10e5;
+    var minNode *ListNode;
+    minIdx := 0
+
+    // Ищем голову списка
+    for i := 0; i < len(lists); i++ {
+        if ((lists[i] != nil) && (lists[i].Val < minVal)) {
+            minVal = lists[i].Val
+            minIdx = i
+        } 
+        if (lists[i] == nil) {
+            emptyCount++ // Считаем пустые списки
+        }
+    }
+
+    // Если все списки пустые - вернуть nil
+    if (emptyCount == len(lists)) {
+        return nil
+    }
+
+    // Записываем голову списка
+    minNode = lists[minIdx]
+    lists[minIdx] = lists[minIdx].Next
+    if (lists[minIdx] == nil) {
+        emptyCount++
+    }
+    head = minNode
+    curr = head
+
+    // То же самое для остальных элементов
+    for (emptyCount != len(lists)) {
+        emptyCount = 0
+        var minVal int = 10e5
+        for i := 0; i < len(lists); i++ {
+            if ((lists[i] != nil) && (lists[i].Val < minVal)) {
+                minVal = lists[i].Val
+                minIdx = i
+            } 
+            if (lists[i] == nil) {
+                emptyCount++
+            }
+        }
+        minNode = lists[minIdx]
+        lists[minIdx] = lists[minIdx].Next
+        if (lists[minIdx] == nil) {
+            emptyCount++
+        }
+
+        curr.Next = minNode
+        curr = curr.Next
+    }
+    return head
+}
+\`\`\`
+
+Получилась сложность O(n^2), литкод говорит, что ты мудак. Нужно другое решение
+
+#### Адекватное решение
+
+Будем мёрджить не всё сразу, а попарно. Поскольку смёрджить два списка можно за логарифм, итоговая сложность будет O(nlogn)
+
+\`\`\`go
+func mergeKLists(lists []*ListNode) *ListNode {
+    if len(lists) == 0 {
+        return nil
+    }
+
+    // пока листов больше чем один - выкидываем их из общего списка, мёрджим и закидываем в конец (так быстрее)
+    for len(lists) > 1 {
+        l1 := lists[0]
+        l2 := lists[1]
+        lists = lists[2:]
+
+        lists = append(lists, mergeTwoLists(l1, l2))
+    }
+    return lists[0]
+}
+
+func mergeTwoLists(list1 *ListNode, list2 *ListNode) *ListNode {
+    var head *ListNode
+    var curr *ListNode
+    if (list1 == nil) {
+        return list2
+    } else if (list2 == nil) {
+        return list1
+    } else if (list1.Val < list2.Val) {
+        head = list1
+        list1 = list1.Next
+    } else {
+        head = list2
+        list2 = list2.Next
+    }
+
+    for (list1 != nil && list2 != nil) {
+        if (list1.Val < list2.Val) {
+            curr.Next = list1
+            curr = curr.Next
+            list1 = list1.Next
+        } else {
+            curr.Next = list2
+            curr = curr.Next
+            list2 = list2.Next
+        }
+    } 
+    if (list1 != nil) {
+        for (list1 != nil) {
+            curr.Next = list1
+            curr = curr.Next
+            list1 = list1.Next
+        }
+    } else if (list2 != nil) {
+        for (list2 != nil) {
+            curr.Next = list2
+            curr = curr.Next
+            list2 = list2.Next
+        }
+    }
+    return head
+}
+\`\`\`
+
+Runtime 0ms Beats 100.00%
+Memory 6.69MB Beats 72.01%
+
+Умные люди укладываются в 6.4, но пойдёт
+
+### Linked list cycle
+
+[Ссылка](https://leetcode.com/problems/linked-list-cycle/)
+
+#### Постановка задачи
+
+Определить, есть ли цикл в односвязном списке
+
+#### Решение
+
+Рассмотрим два варианта:
+
+1. Проходимся по списку двумя указателями: один будет делать Next, второй - Next.Next. Если второй догнал первый - цикл есть
+
+\`\`\`go
+func hasCycle(head *ListNode) bool {
+    curr := head
+    for (curr != nil && curr.Next != nil) {
+        head = head.Next
+        curr = curr.Next.Next
+        if (curr == head) {
+            return true
+        }
+    }
+    return false
+}
+\`\`\`
+
+2. Реверсим список и смотрим, не вернулись ли мы к голове
+
+\`\`\`go
+func hasCycle(head *ListNode) bool {
+    oldHead := head
+    var newHead *ListNode
+    curr := head
+    for curr != nil{
+        newHead, curr, curr.Next = curr, curr.Next, newHead
+        if (curr == oldHead) {
+            return true
+        }
+    }
+    return false
+}
+\`\`\`
+
+Поскольку проверки на время и память в этой задаче - рнг, можно предположить, что работают +- одинаково
+
+### Add two numbers
+
+[Ссылка](https://leetcode.com/problems/add-two-numbers/)
+
+#### Постановка задачи
+
+Даны два связных списка. Каждый из них представляет собой число, записанное в обратном порядке. Необходимо вернуть такой связный список, который являлся бы суммой этой чисел, записанной также в обратном порядке.
+\`\`\`js
+Input: l1 = [9,9,9,9,9,9,9], l2 = [9,9,9,9]
+Output: [8,9,9,9,0,0,0,1]
+Explaination: 9_999_999 + 9_999 = 10_009_998 
+\`\`\`
+
+#### Решение
+
+Удобно, что числа записаны с конца. Проходимся по спискам и складываем их значения. Если значение больше 9 - вычитаем 10 и запоминаем единицу. Её надо будет добавить при сложении следующих элементов. Если к концу прохода осталась единица, её нужно добавить в хвост полученного списка
+
+\`\`\`go
+func addTwoNumbers(l1 *ListNode, l2 *ListNode) *ListNode {
+    // Если один из списков пуст - эквивалентно сложением с 0
+    if (l1 == nil) {
+        return l2
+    } else if (l2 == nil) {
+        return l1
+    }
+
+    // Считаем первый элемент. В nextAppend будем запоминать единицу, если случится переполнение.
+    nextAppend := 0
+    sum := l1.Val + l2.Val
+    if (sum > 9) {
+        sum -= 10
+        nextAppend += 1
+    }
+    lSum := &ListNode{sum , nil}
+    currSum := lSum
+    l1 = l1.Next
+    l2 = l2.Next
+
+    // Проходимся по спискам, пока не закончится самый короткий из них
+    for (l1 != nil && l2 != nil) {
+        sum = l1.Val + l2.Val + nextAppend
+        if (sum > 9) {
+            sum -= 10
+            nextAppend = 1
+        } else {
+            nextAppend = 0
+        }
+        currSum.Next = &ListNode{sum, nil}
+        currSum = currSum.Next
+
+        l1 = l1.Next
+        l2 = l2.Next
+    }
+
+    // Добиваем список, который был длиннее
+    if (l1 != nil) {
+        for (l1 != nil) {
+            sum = l1.Val + nextAppend
+            if (sum > 9) {
+                sum -= 10
+                nextAppend = 1
+            } else {
+                nextAppend = 0
+            }
+            currSum.Next = &ListNode{sum, nil}
+            currSum = currSum.Next
+
+            l1 = l1.Next
+        }
+    } else if (l2 != nil) {
+        for (l2 != nil) {
+            sum = l2.Val + nextAppend
+            if (sum > 9) {
+                sum -= 10
+                nextAppend = 1
+            } else {
+                nextAppend = 0
+            }
+            currSum.Next = &ListNode{sum, nil}
+            currSum = currSum.Next
+
+            l2 = l2.Next
+        }
+    }
+
+    // Если осталась единица, закинуть её в конец
+    if (nextAppend == 1) {
+        currSum.Next = &ListNode{1, nil}
+    }
+    return lSum
+}
+\`\`\`
+
+### Reverse linked list
+
+[Ссылка](https://leetcode.com/problems/reverse-linked-list/)
+
+####
+
+Самая базовая задача, спросят 100%, если не ответишь, даже не будут общаться дальше.
+
+#### Постановка задачи
+
+Дан указатель на первый элемент односвязного списка. Необходимо развернуть его и вернуть указатель на новый первый элемент.
+
+Пример:
+
+\`\`\`js
+Input: head = [1,2,3,4,5]
+Output: [5,4,3,2,1]
+\`\`\`
+
+#### Решение
+
+Описание элемента односвязного списка имеет вид:
+
+\`\`\`go
+ type ListNode struct {
+    Val int
+    Next *ListNode
+ }
+\`\`\`
+
+Чтобы решить данную задачу, необходимо каждому из элементов списка поменять значение поля "Next", подставив вместо следующего элемента предыдущий (соответственно, для первого элемента - nil). Таким образом, для "1" Next - nil, для "2" - "1", и так далее.
+Если список пустой (head==nil), возвращаем nil
+
+\`\`\`go
+func reverseList(head *ListNode) *ListNode {
+    // Если список пустой - возвращаем nil
+    if head == nil {
+        return nil
+    }
+
+    // Здесь мы будем хранить текущий и следующий элементы
+    var curr *ListNode = head
+    var next *ListNode = head.Next
+    
+    // Головному элементу в качестве следующего задаём nil
+    head.Next = nil
+
+    // Пока следующий(next) элемент не nil, меняем его next на текущий(curr)
+    for (next != nil) {
+        var tmp *ListNode = next.Next
+        next.Next = curr
+        curr = next
+        next = tmp
+    }
+    
+    // Возвращаем последний текущий элемент
+    return curr
+}
+\`\`\`
+
+Можно сделать немного элегантнее:
+
+\`\`\`go
+func reverseList(head *ListNode) *ListNode {
+    var newHead *ListNode
+    curr := head
+    for curr != nil{
+        newHead, curr, curr.Next = curr, curr.Next, newHead
+    }
+    return newHead
+}
+\`\`\`
+
+P. S. В условии сказано, что задачу можно решить рекурсией, но предлагающих решать такие задачи рекурсией надо сразу слать нахуй, так как рекурсия с неограниченной глубиной - верный путь к отвалу.
+
+## Binary Search
+
+### Binary search 
+
+Простой бинарный поиск
+
+[Ссылка](https://leetcode.com/problems/binary-search/)
+
+#### Постановка задачи 
+
+Найти в отсортированном массиве индекс числа за O(logn). Если такого числа нет, вернуть -1.
+
+\`\`\`js
+Input: nums = [-1,0,3,5,9,12], target = 9
+Output: 4
+\`\`\`
+
+#### Решение
+
+Берём средний элемент массива. Если он равен искомому - успех.
+Если меньше - ищем в правой части массива.
+Если больше - ищем в левой части массива.
+Если левая и правая граница поиска схлопнулись, элемента не существует.
+
+\`\`\`go
+func search(nums []int, target int) int {
+    left := 0
+    right := len(nums)-1
+    for (left<=right) {
+        midIdx := (right + left)/2
+        if nums[midIdx] == target {
+            return midIdx
+        }
+		if target < nums[midIdx] {
+            right = midIdx - 1
+        } else {
+            left = midIdx + 1
+        }
+    }
+    return -1
+}
+\`\`\`
+
+### Guess Number Higher or Lower
+
+[Ссылка](https://leetcode.com/problems/guess-number-higher-or-lower/)
+
+#### Постановка задачи
+
+Дано число n. Компьютер угадывает число от 1 до n. Необходимо за O(logn) угадать число. Для проверки вызывается функция guess(), которая вернёт:
+- 0 если число угадано
+- 1 если загаданное число больше переданного
+- -1 если загаданное число меньше переданного
+
+#### Решение
+
+Всё тот же бинарный поиск
+
+\`\`\`go
+func guessNumber(n int) int {
+    left := 1
+    right := n
+    mid := (left+right)/2
+    for res := guess(mid); res != 0; res = guess(mid) {
+        if res == 1 {
+            left = mid + 1 
+        } else {
+            right = mid - 1
+        }
+		mid = (left+right)/2
+    }
+    return mid
+}
+\`\`\`
+
+### Search-a-2d-Matrix
+
+[Ссылка](https://leetcode.com/problems/search-a-2d-matrix/)
+
+#### Постановка задачи
+Дана отсортированная матрица. Определить, есть ли в ней заданное число
+
+\`\`\`js
+Input: matrix = [[1,3,5,7],[10,11,16,20],[23,30,34,60]], target = 3
+Output: true
+\`\`\`
+
+#### Решение
+
+Проходимся по строкам. Если последний элемент в строке <= искомому, делаем по этой строке бинарный поиск
+
+\`\`\`go
+func searchMatrix(matrix [][]int, target int) bool {
+    for i:=0; i < len(matrix); i++ {
+        if (target <= matrix[i][len(matrix[i])-1]) {
+                left := 0
+                right := len(matrix[i])-1
+                for (left<=right) {
+                    midIdx := (right + left)/2
+                    if matrix[i][midIdx] == target {
+                        return true
+                    }
+                    if target < matrix[i][midIdx] {
+                        right = midIdx - 1
+                    } else {
+                        left = midIdx + 1
+                    }
+                }
+                return false
+        }
+    }   
+    return false
+}
+\`\`\`
+
+### Search in Rotated Sorted Array
+
+[Ссылка](https://leetcode.com/problems/search-in-rotated-sorted-array/)
+
+#### Постановка задачи
+
+Найти позицию элемента в массиве. Массив отсортирован по возрастанию, однако положение первого по порядку элемента неизвестно. Элементы уникальны.
+
+\`\`\`js
+Input: nums = [4,5,6,7,0,1,2], target = 0
+Output: 4
+\`\`\`
+
+#### Решение
+
+Как и в обычном бинарном поиске, найдём средний элемент. Далее рассмотрим два случая
+
+- Нулевой элемент <= среднего. Это значит, что на промежутке [left ;mid] значения возрастают. Значит, если arr[0] <= число <= arr[mid], то число в левой части, иначе - в правой.
+- Нулевой элемент > среднего. Это значит, что на промежутке (mid; right] значения возрастают. Значит, если arr[mid] < число <= arr[right], то число в левой части, иначе - в правой.
+
+\`\`\`go
+func search(nums []int, target int) int {
+    left, right := 0, len(nums) - 1
+
+    for left <= right {
+        mid := (left + right) / 2
+
+        if nums[mid] == target {
+            return mid
+        }
+
+        if nums[left] <= nums[mid] {
+            if nums[left] <= target && target < nums[mid] {
+                right = mid - 1
+            } else {
+                left = mid + 1
+            }
+        } else {
+            if nums[mid] < target && target <= nums[right] {
+                left = mid + 1
+            } else {
+                right = mid - 1
+            }
+        }
+    }
+
+    return -1
+}
+\`\`\`
+
+### Find Minimum In Rotated Sorted Array
+
+[Ссылка](https://leetcode.com/problems/find-minimum-in-rotated-sorted-array/)
+
+#### Постановка задачи
+
+Найти позицию минимального элемента в массиве. Массив отсортирован по возрастанию, однако положение первого по порядку элемента неизвестно. Элементы уникальны.
+
+\`\`\`js
+Input: nums = [4,5,6,7,0,1,2]
+Output: 0
+\`\`\`
+
+#### Решение
+
+Сначала проверим массив на отсутствие смещения. Если его нет - нужно просто вернуть нулевой элемент.
+Итак, наш массив возрастает на промежутке [0; x). Нам нужно найти тот самый x. 
+Будем двигать левый элемент, пока не наткнёмся на минимальный. Как и раньше, выбираем средний элемент. Если он больше или равен нулевому, потенциальный минимальный элемент находится справа от него. Если он меньше нулевого, двигаем правый указатель, так как справа от него точно ловить нечего. 
+
+\`\`\`go
+func findMin(nums []int) int {
+    n := len(nums)
+    if nums[0] <= nums[n-1] {
+	    return nums[0]
+    }
+    left, right := 0, n-1
+    for left < right {
+        mid := (left + right) >> 1
+        if nums[0] <= nums[mid] {
+            left = mid+1
+        } else {
+            right=mid
+        }
+    }
+    return nums[left]
+}
+\`\`\`
+
+### Single number
+
+[Ссылка](https://leetcode.com/problems/single-number/)
+
+#### Постановка задачи:
+
+Дан массив. В нём все числа встречаются по два раза, кроме одного - оно встречается один раз. Найдите его.
+
+#### Решение
+
+На самом деле, hash table тут ни к чему. Хочется, конечно, считать через неё количество вхождений каждого элемента, потом сделать итерацию по ключам итд. Но на самом деле всё решается проще: через бинарный оператор ^=. Фокус в следующем: 0 ^= x = x; x ^= x = 0; Соответственно, если взять 0, а потом сделать его xor со всеми элементами, которые встречаются два раза, получится 0. А если сделать xor ещё и с одиночным элементом, получится как раз этот одиночный элемент.
+
+\`\`\`go
+func singleNumber(nums []int) int {
+    res := 0
+    for _, num := range(nums) {
+        res ^=num
+    }
+    return res
+}
+\`\`\`    
+
+### Two sum
+
+[Ссылка](#https://leetcode.com/problems/two-sum/)
+
+#### Постановка задачи
+
+Дан массив чисел и некоторое число. Вернуть индексы двух чисел из массива, которые в сумме дадут заданное число.
+
+\`\`\`js
+Input: nums = [2,7,11,15], target = 9
+Output: [0,1]
+\`\`\`
+
+#### Решение
+
+Заводим numsmap, куда будем складывать все пройденные числа (ключ - само число, значение - его индекс). 
+Начинаем проходиться по массиву чисел. Пытаемся найти в мапе пройденных чисел число, равное target - текущее число. Если такое есть - возвращаем найденный в мапе индекс и текущий индекс.
+
+Если так и не нашли, вернуть пустой слайс.
+\`\`\`go
+func twoSum(nums []int, target int) []int {
+    numsMap := make(map[int]int)
+
+    for i := 0; i < len(nums); i++ {
+        if idx, ok := numsMap[target - nums[i]]; ok {
+            return []int{idx, i}
+        }
+        numsMap[nums[i]] = i
+    }
+    
+    return nil
+}
+\`\`\`
+
+### 4Sum
+
+[Ссылка](https://leetcode.com/problems/4sum/)
+
+#### Постановка задачи
+
+Дан массивв чисел. Вывести все уникальные четвёрки чисел, сумма которых = target.
+
+\`\`\`js
+Input: nums = [1,0,-1,0,-2,2], target = 0
+Output: [[-2,-1,1,2],[-2,0,0,2],[-1,0,0,1]]
+\`\`\`
+
+#### Решение
+
+Честно, без понятия, при чём тут hashtable, да и вообще задача - отстой.
+
+Для начала сортируем числа по возрастанию. Затем проходимся по четвёркам. Подробнее - в комментариях в коде.
+
+\`\`\`go
+func fourSum(nums []int, target int) [][]int {
+    n := len(nums)
+    if n < 4 {
+        return [][]int{}
+    }
+    res := [][]int{}
+    sort.Ints(nums) // сортировка
+    for i := 0; i < n - 3; i++ {
+        if i > 0 && nums[i] == nums[i - 1] {
+            continue
+        } // скипаем такой вариант, чтобы не повторяться
+
+        if nums[i] + nums[n - 1] + nums[n - 2] + nums[n - 3] < target {
+            continue
+        } // скипаем такой вариант, так как nums[i] не хватит, чтобы набрать target, 
+          // как не суммируй
+
+        if nums[i] + nums[i + 1] + nums[i + 2] + nums[i + 3] > target {
+            break
+        } // скипаем такой вариант, так как nums[i] слишком велик, чтобы набрать target, 
+          // как не суммируй
+
+        for j := i + 1; j < n - 2; j++ {
+            // тут все скипы по аналогии с i
+            if j > i + 1 && nums[j] == nums[j - 1] {
+                continue
+            }
+
+            if nums[i] + nums[j] + nums[n - 1] + nums[n - 2] < target {
+                continue
+            }
+
+            if nums[i] + nums[j] + nums[j + 1] + nums[j + 2] > target {
+                break
+            }
+
+            //оставшиеся два числа делаем через два указателя
+            l, r := j + 1, n - 1
+            for l < r {
+                //считаем очередную сумму
+                sum := nums[i] + nums[j] + nums[l] + nums[r]
+
+                if sum == target {
+                    res = append(res, []int{nums[i], nums[j], nums[l], nums[r]})
+
+                    //избавляемся от повторов
+                    for l < r && nums[l] == nums[l + 1] {
+                        l++
+                    }
+
+                    //избавляемся от повторов
+                    for l < r && nums[r] == nums[r - 1] {
+                        r--
+                    }
+
+                    //скипаем пройденное
+                    l++
+                    r--
+                } else if sum < target {
+                    //если сумма маленькая - увеличиваем меньшее (левое)
+                    l++
+                } else {
+                    //если сумма большая - увеличиваем большее (правое)
+                    r--
+                }
+            }
+        }
+    }
+    return res
+}
+\`\`\`
+
+### Group anagrams
+
+[Ссылка](https://leetcode.com/problems/group-anagrams/)
+
+#### Постановка задачи
+
+Дан слайс строк. Необходимо сгруппировать все анаграмы (в любом порядке).
+
+\`\`\`js
+Input: strs = ["eat","tea","tan","ate","nat","bat"]
+
+Output: [["bat"],["nat","tan"],["ate","eat","tea"]]
+\`\`\`
+
+#### Решение 
+
+Делаем мапу анаграм (анаграма / слайс строк) и результирующий слайс слайсов строк
+
+Для начала проходимся по заданным строкам. Переводим их в байты и сортируем в алфавитном порядке. Кладём в мапу (Ключ - результат сортировки, значение - исходная строка)
+
+Затем проходимся по этой мапе, перекладываем все значения в результирующий слайс слайсов
+
+\`\`\`go
+func groupAnagrams(strs []string) [][]string {
+    anagrams := make(map[string][]string)
+    res := make([][]string, 0)
+
+    for _, str := range(strs) {
+        bytes := []byte(str)
+        sort.Slice(bytes, func (i, j int) bool {return bytes[i] > bytes[j]})
+        anagrams[string(bytes)] = append(anagrams[string(bytes)], str)
+    }
+
+    for _, v := range(anagrams) {
+        res = append(res, v)
+    }
+    return res
+}
+\`\`\`
+
+### Valid anagram
+[Ссылка](https://leetcode.com/problems/valid-anagram/)
+#### Постановка задачи 
+
+Даны две строки. Определить, являются ли они друг для друга анаграмами.
+
+\`\`\`js
+Input: s = "anagram", t = "nagaram"
+Output: true
+
+Input: s = "rat", t = "car"
+Output: false
+\`\`\`
+
+#### Решение
+
+Если длины строк не равны - сразу мимо.
+Заводим мапу (ключ - символ, значение - количество встреч в строке), считаем в ней все символы из первой строки. Затем проходимся по второй строке, но уже делаем не +1 в мапе, а -1 для каждого символа. Если значение в мапе отрицательное - возвращаем false.
+
+\`\`\`go
+    count := make(map[rune]int)
+
+    if len(s) != len(t) {
+        return false
+    }
+
+    for _, rune := range(s) {
+        count[rune] += 1
+	}
+
+	for _, rune := range(t) {
+		count[rune] -= 1
+		if count[rune] < 0 {
+			return false
+		}
+	}
+	return true
+\`\`\`    
+
+### Find all anagrams in a string
+
+[Ссылка](https://leetcode.com/problems/find-all-anagrams-in-a-string/)
+
+#### Постановка задачи
+
+Даны две строки: s и p. Найти все индексы начала подстрок в s, являющихся анаграмами для p
+
+\`\`\`js
+Input: s = "abab", p = "ab"
+Output: [0,1,2]
+Explanation:
+The substring with start index = 0 is "ab", which is an anagram of "ab".
+The substring with start index = 1 is "ba", which is an anagram of "ab".
+The substring with start index = 2 is "ab", which is an anagram of "ab".
+\`\`\`
+
+#### Решение
+
+Если s короче p - сразу отмена.
+Заводим две строки длиной 26(вместо мап, потому что по условию в строках только прописные латинские знаки)
+
+Проходимся по строке p. Считаем символы, складываем в str1.
+
+Заводим счётчик j=0.
+Проходимся по строке s. Считаем в str2 очередной символ. 
+
+Сравниваем кол-во выбранного символа в str2 и str1.
+Если в str2 его больше, чем в str1, значит он лишний. Уменьшаем счётчики всех элементов от текущего j до такого j, что кол-во выбранного символа в str2 и str1 равно.
+
+Если индекс текущего элемента + 1 - j  = длине строки p => ничего лишнего не зацепили => кладём j в массив результатов.
+
+\`\`\`go
+    res:=make([]int,0)
+    if len(s) < len(p) {
+        return nil
+    }
+    str1 := make([]int, 26)
+    str2 := make([]int, 26)
+    for _, char := range(p) {
+        str1[char-'a']++
+    }
+    j:=0
+    for idx, char := range(s) {
+        str2[char-'a']++
+        for (str2[char-'a']>str1[char-'a']) {
+            str2[s[j]-'a']--
+            j++
+        }
+        if idx+1-j == len(p) {
+            res = append(res,j)
+        }
+    }
+    return res
+\`\`\`    
+
+## Queue/stack
+
+### Valid parentheses
+
+[Ссылка](https://leetcode.com/problems/valid-parentheses/)
+
+#### Постановка задачи
+
+Дана строка, состоящая из скобок (круглых, квадратных, фигурных). Определить, валидна ли расстановка скобок
+
+\`\`\`js
+Input: s = "(]"
+Output: false
+
+Input: s = "([])"
+Output: true
+\`\`\`
+
+#### Решение
+
+Заведём стек, работающий по следующей логике:
+
+- Если скобка открывающая - кладём
+- Если скобка закрывающая, а наверху лежит такая же открывающая - убираем открывающую
+- Если скобка закрывающая, а наверху лежит что-то кроме такой же открывающей - ошибка
+
+Если стек к концу строки пустой - успех, иначе - ошибка
+
+\`\`\`go
+type Node struct {
+    Bracket rune
+    Next *Node
+}
+
+type Stack struct {
+    top *Node
+}
+
+func (s *Stack) push (value rune) {
+    s.top = &Node{value, s.top}
+}
+
+func (s* Stack) isEmpty () bool {
+    return s.top == nil
+}
+
+func (s *Stack) pop(char rune) bool {
+	if (s.top == nil) {
+		return 
+	}
+	switch char {
+		case ')':
+			if s.top.Bracket != '(' {return false}
+		case ']':
+			if s.top.Bracket != '[' {return false}
+		case '}':
+			if s.top.Bracket != '{' {return false}
+	}
+    s.top = s.top.Next
+	return true
+}
+
+func newStack() *Stack {
+	return &Stack{nil}
+}
+
+func isValid(s string) bool {
+    brackets := newStack()
+    
+	for _, ch := range(s) {
+		switch ch {
+			case '(':
+				brackets.push('(')
+			case '[':
+				brackets.push('[')
+			case '{':
+				brackets.push('{')
+			case ')':
+				if ! brackets.pop(')') {
+					return false
+				}
+			case ']':
+				if !brackets.pop(']') {
+					return false
+				}
+			case '}':
+				if !brackets.pop('}') {
+					return false
+				}
+		}
+	}
+	return brackets.isEmpty() 
+}
+\`\`\`
+
+### dfs/bfs
+
+#### Number of islands
+
+[Ссылка](https://leetcode.com/problems/number-of-islands/)
+
+#### Постановка задачи
+
+Дана матрица MxN, где 1 - земля, 0 - вода. Посчитать количество островов
+
+\`\`\`js
+Input: grid = [
+  ["1","1","0","0","0"],
+  ["1","1","0","0","0"],
+  ["0","0","1","0","0"],
+  ["0","0","0","1","1"]
+]
+Output: 3
+\`\`\`
+
+#### Решение
+
+Обходим матрицу. Как только натыкаемся на 1 - добавляем 1 к количеству островов и обнуляем остров (если вокруг клетки есть единичные - обнуляем их, повторяем то же самое для обнулённых клеток).
+
+\`\`\`go
+type islands struct {
+	adjMatrix [][]byte
+}
+
+func (i *islands) zeroIsland(x int, y int) {
+	i.adjMatrix[x][y] = '0'
+	directions := []int{-1, 0, 1, 0, -1}
+	for k := 0; k < 4; k++ {
+		x2, y2 := x+directions[k], y+directions[k+1]
+		if x2 >= 0 && x2 < len(i.adjMatrix) && y2 >= 0 && y2 < len(i.adjMatrix[0]) && i.adjMatrix[x2][y2] == '1' {
+			i.zeroIsland(x2, y2)
+		}
+	}
+}
+
+func (il *islands) count() (ans int) {
+	ans = 0
+	for i := 0; i < len(il.adjMatrix); i++ {
+		for j := 0; j < len(il.adjMatrix[0]); j++ {
+			if il.adjMatrix[i][j] == '1' {
+				il.zeroIsland(i, j)
+				ans++
+			}
+		}
+	}
+	return
+}
+
+func numIslands(grid [][]byte) int {
+    i := islands{grid}
+    return i.count()   
+}
+\`\`\`
+
+### Remove invalid parentheses
+
+[Ссылка](https://leetcode.com/problems/remove-invalid-parentheses/)
+
+#### Постановка задачи
+
+Дана строка, которая содержит скобки и латинские буквы. Убрать минимально возможное количество скобок так, чтобы строка была валидной.
+
+\`\`\`js
+Input: s = "(a)())()"
+Output: ["(a())()","(a)()()"]
+\`\`\`
+
+
+#### Решение
+
+Для начала считаем, сколько у нас незакрытых левых и неоткрытых правых скобок.
+
+Остальные комменты - в коде =)
+
+\`\`\`go
+func removeInvalidParentheses(str string) []string {
+	extraLeft := 0
+	extraRight := 0
+	result := []string{}
+
+	for _, char := range str {
+		if char == '(' {
+			extraLeft++
+		} else if char == ')' {
+			if extraLeft == 0 {
+				extraRight++
+			} else {
+				extraLeft--
+			}
+		}
+	}
+
+	dfs(str, 0, extraLeft, extraRight, &result)
+	return result
+}
+
+func dfs(s string, start int, extraLeft int, extraRight int, res *[]string) {
+    // проверка строки на валидность
+	if extraLeft == 0 && extraRight == 0 && isOk(s) {
+		*res = append(*res, s)
+		return
+	}
+
+    //проходимся по строке и пытаемся выкинуть i-ый символ
+	for i := start; i < len(s); i++ {
+        // избавляемся от повторений
+		if i != start && s[i] == s[i-1] {
+			continue
+		}
+
+		cur := s[:i] + s[i+1:]
+		if s[i] == '(' && extraLeft > 0 {
+			dfs(cur, i, extraLeft-1, extraRight, res)
+		} else if s[i] == ')' && extraRight > 0 {
+			dfs(cur, i, extraLeft, extraRight-1, res)
+		}
+	}
+}
+
+func isOk(str string) bool {
+	count := 0
+
+    // проверка строки на валидность без стека
+	for _, char := range str {
+		if char == '(' {
+			count++
+		} else if char == ')' {
+			count--
+		}
+
+		if count < 0 {
+			return false
+		}
+	}
+	return count == 0
+}
+\`\`\`
+
+### Merge intervals
+
+[Ссылка](https://leetcode.com/problems/merge-intervals)
+
+#### Постановка задачи
+
+Дан массив интервалов (начало, конец). Слить все пересекающиеся интервалы в один.
+
+\`\`\`js
+Input: intervals = [[1,3],[2,6],[8,10],[15,18]]
+Output: [[1,6],[8,10],[15,18]]
+Explanation: Since intervals [1,3] and [2,6] overlap, merge them into [1,6].
+\`\`\`
+#### Решение
+
+См. комменты в коде
+
+\`\`\`go
+//нужно чтобы можно было сортировать
+type Intervals [][]int
+
+func (it Intervals) Len() int {
+	return len(it)
+}
+
+// Сортируем по возрастанию начала. 
+// Если у двух элементов одинаковое начало - сортируем их по возрастанию конца
+func (it Intervals) Less(i, j int) bool {
+	if it[i][0] == it[j][0] {
+		return it[i][1] < it[j][1]
+	} else {
+		return it[i][0] < it[j][0]
+	}
+}
+
+func (it Intervals) Swap(i, j int) {
+	it[i], it[j] = it[j], it[i]
+}
+
+func merge(intervals [][]int) [][]int {
+	if len(intervals) == 0 {
+		return intervals
+	}
+	ints := Intervals(intervals)
+	sort.Sort(ints)
+	newInts := Intervals{intervals[0]}
+
+	for i := 1; i < len(ints); i++ {
+        // Если этот интервал начинается не позже, чем кончается предыдущий 
+        // Имеет смысл слить его с предыдущим
+		if (ints[i][0] <= newInts[len(newInts)-1][1]) {
+            // берём большее из двух значение конца.
+			if (ints[i][1] >= newInts[len(newInts)-1][1]) {
+				newInts[len(newInts)-1] = []int{newInts[len(newInts)-1][0], ints[i][1]}
+			} else {
+				newInts[len(newInts)-1] =  []int{newInts[len(newInts)-1][0], newInts[len(newInts)-1][1]}
+			}
+		} else {
+            //Если не сливается с предыдущим - добавляем просто так
+			newInts = append(newInts, []int{ints[i][0], ints[i][1]})
+		}
+	}
+	return newInts
+}
+\`\`\`
+
+## Heap / hash
+
+### Top K frequent words
+
+[Ссылка](https://leetcode.com/problems/top-k-frequent-words)
+
+#### Постановка задачи
+
+Дан слайс строк, каждое слово - отдельная строка. Найти K самых встречающихся
+
+\`\`\`js
+Input: words = ["the","day","is","sunny","the","the","the","sunny","is","is"], k = 4
+Output: ["the","is","sunny","day"]
+Explanation: "the", "is", "sunny" and "day" are the four most frequent words, 
+with the number of occurrence being 4, 3, 2 and 1 respectively.
+\`\`\`
+
+#### Решение
+
+Создаём мапу, чтобы считать количество встреч для каждого из слов. Затем создаём слайс из всех слов на основе ключей мапы. Этот слайс сортируем на основе того, сколько раз эти слова встречаются в исходном слайсе. Возвращаем k самых первых элементов в отсортированном слайсе.   
+
+\`\`\`go
+func topKFrequent(words []string, k int) []string {
+	result := []string{}
+
+    meetings := make(map[string]int)
+	for i := range words {
+		meetings[words[i]]++
+	}
+
+	for word, _ := range meetings {
+		result = append(result, word)
+	}
+
+	sort.Slice(result, func(i, j int) bool { a, b := result[i], result[j]; return meetings[a] > meetings[b] || meetings[a] == meetings[b] && a < b })
+
+	return result[:k]
+}
+\`\`\`
+
+### Top K frequent elements
+
+[Ссылка](https://leetcode.com/problems/top-k-frequent-elements/)
+
+#### Постановка задачи
+
+Аналогично предыдущей задаче, только вместо строк цифры. Рассмотрим другой вариант решения (мне он нравится больше).
+
+\`\`\`js
+Input: nums = [1,1,1,2,2,3], k = 2
+Output: [1,2]
+\`\`\`
+#### Решение
+Опять создаём и заполняем мапу с частотой встречи чисел. На их основе строим min-кучу. Если в min-куче элементов больше, чем k, выталкиваем верхний (минимальный элемент). В результат закидываем то, что было в куче.
+
+\`\`\`go
+type pair struct {
+	key int
+	val int
+}
+
+type minIntHeap []pair
+
+func (h minIntHeap) Len() int {
+	return len(h)
+}
+
+func (h minIntHeap) Less(i, j int) bool {
+	return h[i].val < h[j].val
+}
+
+func (h minIntHeap) Swap(i, j int) {
+	h[i], h[j] = h[j], h[i]
+}
+
+func (h *minIntHeap) Push(val interface{}) {
+	*h = append(*h, val.(pair))
+}
+
+func (h *minIntHeap) Pop() interface{} {
+	heapDerefrenced := *h
+
+	size := len(heapDerefrenced)
+	val := heapDerefrenced[size-1]
+	*h = heapDerefrenced[:size-1]
+
+	return val
+}
+
+func topKFrequent(nums []int, k int) []int {
+	res := minIntHeap{}
+	result := []int{}
+
+    meetings := make(map[int]int)
+	for i := range nums {
+		meetings[nums[i]]++
+	}
+
+	for num, meet := range meetings {
+		heap.Push(&res, pair{num,meet})
+
+		if len(res) > k {
+			heap.Pop(&res)
+		}
+	}
+
+	for len(res) > 0 {
+		result = append(result, heap.Pop(&res).(pair).key)
+	}
+
+	return result
+}
+\`\`\`
+
+## Two pointers
+
+### Container with most water
+
+[Ссылка](https://leetcode.com/problems/container-with-most-water/)
+
+#### Постановка задачи
+
+Дан массив высот столбцов. Нужно выделить контейнер с самым большим объёмом. Объём вычисляется как минимальный из двух элементов + расстояние между ними.
+
+\`\`\`js
+Input: height = [1,8,6,2,5,4,8,3,7]
+Output: 49
+Explanation: The above vertical lines are represented by array [1,8,6,2,5,4,8,3,7]. In this case, the max area of water (blue section) the container can contain is 49.
+\`\`\`
+
+#### Решение
+
+Ставим два указателя: в начало и в конец. 
+
+Рассчитываем объём и перезаписываем максимальный если надо.
+
+Если левый ниже, двигаем левый указатель, иначе - правый.
+
+\`\`\`go
+func maxArea(height []int) int {
+    left := 0
+	right := len(height) - 1
+	max := 0
+
+	for left < right {
+		volume := height[right] * (right-left)
+		if height[left] < height[right] {
+			volume = height[left] * (right-left)
+		} 
+		if max < volume {
+			max = volume
+		}
+		if height[left] < height[right] {
+			left++
+		} else {
+			right--
+		}
+	}
+
+	return max
+}
+\`\`\`
+
+### Partition labels
+
+[Ссылка](https://leetcode.com/problems/partition-labels/)
+
+#### Постановка задачи
+
+Дана строка. Нужно поделить её на несколько подстрок так, чтобы любая буква из любой подстроки ни разу не встречалась в других подстроках. Количество подстрок должно быть максимально. Вернуть размеры подстрок.
+
+\`\`\`js
+Input: s = "ababcbacadefegdehijhklij"
+Output: [9,7,8]
+Explanation:
+The partition is "ababcbaca", "defegde", "hijhklij".
+This is a partition so that each letter appears in at most one part.
+A partition like "ababcbacadefegde", "hijhklij" is incorrect, because it splits s into less parts.
+\`\`\`
+
+#### Решение
+
+Заводим массив, в котором будем считать последний индекс, когда встретился тот или иной символ.
+
+В переменной maxVal будем хранить максимально возможный индекс для текущей подстроки.
+В переменной j будем хранить место начала новой подстроки.
+Проходимся по строке. Если текущий символ встречается в последний раз, и никакой из предыдущих символов больше не встретится, обновляем максимально возможный индекс для текущей подстроки. Если этот индекс совпадает с текущим - отсекаем подстроку.
+
+\`\`\`go
+func partitionLabels(s string) []int {
+    res := make([]int, 0)
+
+    lastMet := [26]int{}
+	for i, c := range s {
+		lastMet[c-'a'] = i
+	}
+
+	var maxVal, j int
+	for i, c := range s {
+		if (lastMet[c-'a'] > maxVal) {
+			maxVal = lastMet[c-'a']
+		}
+		if maxVal == i {
+			res = append(res, i-j+1)
+			j = i + 1
+		}
+	}
+
+	return res
+}
+\`\`\`
+
+## Sliding window
+
+### Longest repeating character replacement
+
+[Ссылка](https://leetcode.com/problems/longest-repeating-character-replacement/)
+
+#### Постановка задачи
+
+Дана строка из заглавных латинских букв. Замените не более k букв так, чтобы получилась самая длинная возможная последовательность из одинаковых букв. Верните длину этой последовательности.
+
+\`\`\`js
+Input: s = "ABAB", k = 2
+Output: 4
+Explanation: Replace the two 'A's with two 'B's or vice versa.
+\`\`\`
+
+#### Решение
+
+Итак, вновь создаём массив для расчёта, сколько раз встречается тот или иной символ. Заполняем его. В процессе заполнения также обновляем счётчик самой часто встречающейся буквы.
+
+В переменной right будем хранить текущий индекс (при заполнении), он же будет правой стороной окна. Размер окна будет равен размеру максимальной возможной последовательности
+В переменной left будем хранить потенциальное начало окна.
+
+Если необходимое количество замен для получения самой длинной строки больше, чем потенциальная самая длинная строка, уменьшаем количество одинаковых символов и двигаем окно вправо, иначе оно расширится на следующем этапе цикла.
+
+По итогу имеем индекс начала окна, который нужно вычесть из длиных исходной строки, чтобы получить результат.
+
+\`\`\`go
+func characterReplacement(s string, k int) int {
+    count := [26]int{}
+	left, maxVal := 0, 0
+	for right, c := range s {
+		count[c-'A']++
+		if (count[c-'A'] > maxVal) {
+			maxVal = count[c-'A']
+		}
+		if right-left+1-maxVal > k {
+			count[s[left]-'A']--
+			left++
+		}
+	}
+	return len(s) - left
+}
+\`\`\`
+
+## Trees
+
+### Same tree
+
+[Ссылка](https://leetcode.com/problems/same-tree/)
+
+#### Постановка задачи
+
+Проверить, одинаковы ли два дерева
+
+\`\`\`js
+Input: p = [1,2,3], q = [1,2,3]
+Output: true
+\`\`\`
+#### Решение 
+
+Проверяем равенство значений и равенство поддеревьев.
+
+\`\`\`go
+func isSameTree(p *TreeNode, q *TreeNode) bool {
+	if p == nil && q == nil {
+		return true
+	} else if p == nil || q == nil {
+		return false
+	}
+	return p.Val == q.Val && isSameTree(p.Left, q.Left) && isSameTree(p.Right, q.Right)
+}
+\`\`\`
+### Symmetric tree
+
+[Ссылка](https://leetcode.com/problems/symmetric-tree/)
+
+#### Постановка задачи
+
+Проверить, симметрично ли дерево относительно своего центра.
+
+\`\`\`js
+Input: root = [1,2,2,3,4,4,3]
+Output: true
+\`\`\`
+#### Решение 
+
+Аналогично предыдущему, только свайпаем левое и правое. В качестве двух деревьев берутся left и right корня.
+
+\`\`\`go
+ func isSameTree2(p *TreeNode, q *TreeNode) bool {
+	if p == nil && q == nil {
+		return true
+	} else if p == nil || q == nil {
+		return false
+	}
+	return p.Val == q.Val && isSameTree2(p.Left, q.Right) && isSameTree2(p.Right, q.Left)
+}
+
+func isSymmetric(root *TreeNode) bool {
+	return isSameTree2(root.Left, root.Right)
+}
+\`\`\`
+### Balanced binary tree
+
+[Ссылка](https://leetcode.com/problems/balanced-binary-tree/)
+
+#### Постановка задачи
+
+Проверить, является ли дерево сбалансированным
+
+\`\`\`js
+Input: root = [3,9,20,null,null,15,7]
+Output: true
+\`\`\`
+#### Решение 
+
+Рекурсивно смотрим высоту, если для каких-то из поддеревьев она различается больше, чем на один, fail.
+
+Высота считается как 1 + высота самого высокого из поддеревьев.
+
+Для nil высота 0.
+
+\`\`\`go
+func height (root *TreeNode) int {
+    if root == nil {
+        return 0
+    }
+
+    leftHeight := height(root.Left)
+    rightHeight := height(root.Right)
+
+    if leftHeight == -1 || rightHeight == -1 || abs(leftHeight-rightHeight) > 1 {
+        return -1
+    } 
+
+    if rightHeight > leftHeight {
+        return 1 + rightHeight
+    }
+    return 1 + leftHeight
+}
+
+func isBalanced(root *TreeNode) bool {
+    return height(root)!=-1
+}
+\`\`\`
+### Path sum II
+
+[Ссылка](https://leetcode.com/problems/path-sum-ii/)
+
+#### Постановка задачи
+
+Дано дерево, каждая вершина имеет числовое значение. Найти все пути от корня до листьев, чтобы сумма вершин в пути была равна targetSum.
+
+\`\`\`js
+Input: root = [5,4,8,11,null,13,4,7,2,null,null,5,1], targetSum = 22
+Output: [[5,4,11,2],[5,8,4,5]]
+Explanation: There are two paths whose sum equals targetSum:
+5 + 4 + 11 + 2 = 22
+5 + 8 + 4 + 5 = 22
+\`\`\`
+#### Решение 
+
+Обходим дерево через dfs, держим в уме текущий путь и текущую сумму. Если текущая вершина - лист и текущая сумма = target, сохраняем в результат.
+
+\`\`\`go
+ type tree struct {
+    root *TreeNode
+    paths [][]int
+    target int
+}
+
+func (t *tree) dfsTree(root *TreeNode, visitedList []int, count int) {
+    if root == nil {
+        return
+    }
+    visitedList = append(visitedList, root.Val)
+    count += root.Val
+
+    if root.Left == nil && root.Right == nil {
+        if count == t.target {
+			nl := make([]int, len(visitedList))
+			copy(nl, visitedList)
+            t.paths = append(t.paths, nl)
+        }
+    } else {
+        t.dfsTree(root.Left, visitedList, count)
+        t.dfsTree(root.Right, visitedList, count)
+    }
+}
+
+func pathSum(root *TreeNode, targetSum int) [][]int {
+    t := tree{
+        root,
+        [][]int{},
+        targetSum,
+    }
+    t.dfsTree(root, []int{}, 0)
+
+	fmt.Println(t.paths)
+    return t.paths
+}
+\`\`\`
+
+## Greedy problems
+
+### Best time to buy and sell stock
+
+[Ссылка](https://leetcode.com/problems/best-time-to-buy-and-sell-stock/)
+
+#### Постановка задачи
+Даны цены на некоторую ценную бумагу в разные дни. Найдите максимально возможный профит
+
+\`\`\`js
+Input: prices = [7,1,5,3,6,4]
+Output: 5
+Explanation: Buy on day 2 (price = 1) and sell on day 5 (price = 6), profit = 6-1 = 5.
+Note that buying on day 2 and selling on day 1 is not allowed because you must buy before you sell.
+\`\`\`
+#### Решение 
+
+Выберем нулевой день для покупки.
+
+Итерируемся по всем дням, считаем их днями продажи. Считаем текущий профит. 
+Если он максимальный, записываем его в макс значение. Если в этот день можно купить дешевле, чем раньше, перезаписываем день продажи.
+
+Возвращаем максимальный профит
+
+\`\`\`go
+func maxProfit(prices []int) int {
+    profit := 0
+    buy := prices[0]
+    for _, sell := range(prices) {
+        if profit < (sell-buy) {
+            profit = sell-buy
+        } 
+        if (buy > sell) {
+            buy = sell
+        }
+    }
+    return profit
+}
+\`\`\`
+`
+            const marked = new Marked(
+								  markedHighlight({
+									emptyLangClass: 'hljs',
+									langPrefix: 'hljs language-',
+									highlight(code, lang, info) {
+									  const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+									  return hljs.highlight(code, { language }).value;
+									}
+								  })
+								);
+            const html = marked.parse(markdown);
+            
+            document.getElementById('html-output').innerHTML = html;
+        }
+	convertMarkdown()
+    </script>
+</body>
+</html>
