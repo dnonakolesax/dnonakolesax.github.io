@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>leetbase</title>
+    <title>VKAT V GO</title>
 	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.1/styles/github.min.css">
     <style>
         body {
             font-family: Arial, sans-serif;
             margin: 10px 0 10px 0;
         }
+		img {
+			width: 100%
+		}
         #html-output {
             margin-bottom: 20px;
 			margin-left: auto;
@@ -37,8 +40,1369 @@
         function convertMarkdown() {
 			const { Marked } = globalThis.marked;
 			const { markedHighlight } = globalThis.markedHighlight;
-            const markdown = `
-            TODO
+            const markdown = `# Go
+
+## Базовые типы данных
+
+\`\`\`go
+const (
+	Bool
+	Int
+	Int8
+	Int16
+	Int32
+	Int64
+	Uint
+	Uint8
+	Uint16
+	Uint32
+	Uint64
+	Uintptr
+	Float32
+	Float64
+	Complex64
+	Complex128
+	Array
+	Chan
+	Func
+	Interface
+	Map
+	Pointer
+	Slice
+	String
+	Struct
+	UnsafePointer
+)
+\`\`\`
+
+Общие метаданные для всех типов:
+
+\`\`\`go
+type Type struct {
+	Size_       uintptr
+	PtrBytes    uintptr // number of (prefix) bytes in the type that can contain pointers
+	Hash        uint32  // hash of type; avoids computation in hash tables
+	TFlag       TFlag   // extra type information flags
+	Align_      uint8   // alignment of variable with this type
+	FieldAlign_ uint8   // alignment of struct field with this type
+	Kind_       Kind    // enumeration for C
+	// function for comparing objects of this type
+	// (ptr to object A, ptr to object B) -> ==?
+	Equal func(unsafe.Pointer, unsafe.Pointer) bool
+	// GCData stores the GC type data for the garbage collector.
+	// Normally, GCData points to a bitmask that describes the
+	// ptr/nonptr fields of the type. The bitmask will have at
+	// least PtrBytes/ptrSize bits.
+	// If the TFlagGCMaskOnDemand bit is set, GCData is instead a
+	// **byte and the pointer to the bitmask is one dereference away.
+	// The runtime will build the bitmask if needed.
+	// (See runtime/type.go:getGCMask.)
+	// Note: multiple types may have the same value of GCData,
+	// including when TFlagGCMaskOnDemand is set. The types will, of course,
+	// have the same pointer layout (but not necessarily the same size).
+	GCData    *byte
+	Str       NameOff // string form
+	PtrToThis TypeOff // type for pointer to this type, may be zero
+}
+\`\`\`
+
+
+### Простые
+
+- bool
+- int, int8, int16, int32, int64
+- uint, uint8, uint16, uint32, uint64
+- byte
+- float32, float64
+- rune 
+- uintptr
+- complex64, complex128
+
+### Массив
+
+\`\`\`go
+arr := [5]int{1,2,3,4,5}
+
+type ArrayType struct {
+	Type
+	Elem  *Type // array element type
+	Slice *Type // slice type
+	Len   uintptr
+}
+\`\`\`
+Фиксированный размер: len(arr) зашит напрямую в тип
+
+### Слайс
+
+\`\`\`go
+type SliceType struct {
+	Type // базовый тип
+	Elem *Type // тип элемента
+}	
+
+sl := make([]int, 5, 10) 
+
+type slice struct {
+	array unsafe.Pointer // указатель на первый элемент, элементы лежат вместе
+	len   int // сколько элементов занято 
+	cap   int // сколько памяти выделено
+}
+\`\`\`
+
+Добавление происходит с помощью функции append. Если при добавлении вышли за размер cap, выделяем новый массив в n раз больше (до 256 - в 2, дальше по мудрой формуле) и перекидываем туда все данные
+
+Формула для расчёта новой cap:
+
+\`\`\`go
+newcap := oldCap
+const threshold = 256
+if oldCap < threshold {
+	return doublecap
+}
+for {
+	newcap += (newcap + 3*threshold) >> 2
+
+	if uint(newcap) >= uint(newLen) {
+		break
+	}
+}
+\`\`\`
+Там ещё прогоняется через roundupsize, но это не так важно
+
+\`\`\`go
+func roundupsize(size uintptr, noscan bool) (reqSize uintptr) {
+	reqSize = size
+	if reqSize <= maxSmallSize-mallocHeaderSize {
+		// Small object.
+		if !noscan && reqSize > minSizeForMallocHeader { // !noscan && !heapBitsInSpan(reqSize)
+			reqSize += mallocHeaderSize
+		}
+		// (reqSize - size) is either mallocHeaderSize or 0. We need to subtract mallocHeaderSize
+		// from the result if we have one, since mallocgc will add it back in.
+		if reqSize <= smallSizeMax-8 {
+			return uintptr(class_to_size[size_to_class8[divRoundUp(reqSize, smallSizeDiv)]]) - (reqSize - size)
+		}
+		return uintptr(class_to_size[size_to_class128[divRoundUp(reqSize-smallSizeMax, largeSizeDiv)]]) - (reqSize - size)
+	}
+	// Large object. Align reqSize up to the next page. Check for overflow.
+	reqSize += pageSize - 1
+	if reqSize < size {
+		return size
+	}
+	return reqSize &^ (pageSize - 1)
+}
+\`\`\`
+
+Если при append не вышли за границы cap, вернётся тот же самый слайс:
+
+\`\`\`go
+s1 := make([]int, 5, 10)
+for i := 0; i < 5; i++ {
+    s1[i] = i
+}
+s2 := append(s1, 6)
+fmt.Println(s1) [0 1 2 3 4] // len не изменился, поэтому без 6
+fmt.Println(s2) [0 1 2 3 4 6]
+s1 = append(s1, 7)
+fmt.Println(s1) [0 1 2 3 4 7] 
+fmt.Println(s2) [0 1 2 3 4 7] // шестёрка перезаписалась семёркой
+\`\`\`
+
+Если делаете слайс от слайса, тоже будьте аккуратны:
+
+\`\`\`go
+func main() {
+    arr := [5]int{1, 2, 3, 4, 5}
+    slice1 := arr[1:4] // len = 3 (по размеру новго слайса), cap = 4 (от 1 до конца исходного слайса)
+    slice2 := append(slice1, 10)
+    slice2[0] = 99
+
+    fmt.Println(arr) // 1 99 3 4 10
+    fmt.Println(slice1) // 99 3 4
+    fmt.Println(slice2) // 99 3 4 10
+}
+\`\`\`
+
+Ограничить capacity можно третьим аргументом. Cap = третий аргумент минус первый:
+
+\`\`\`go
+arr := [10]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+
+a := arr[3:6:6]
+println(len(a)) // 3
+println(cap(a)) // 3, без :6 было бы 7
+\`\`\`	
+
+Всегда, когда работайте со слайсами, думайте про содержимое, len и cap
+
+### Строки
+
+\`\`\`go
+type stringStruct struct {
+	str unsafe.Pointer
+	len int
+}
+\`\`\`
+
+Строка - это массив байт (поэтому для неё работают все приколы с массивами). Однако, далеко не все символы кодируются одним байтом. Для этого используются руны. Руны состоят из нескольких байт. Это нужно учитывать при итерации по строке:
+
+\`\`\`go
+    s := string("строка")
+
+	fmt.Println(len(s)) //12
+    fmt.Println(s[0]) // что-то непонятное
+    fmt.Println(utf8.RuneCountInString(s)) //6
+
+	for i, r := range(s) {
+		fmt.Println(i, r) //0 С, 2 Т, 4 Р, 6 О, 8 К, 10 А
+	}
+\`\`\`
+Как видно, русская буква занимает целых два байта.
+
+### Время
+
+Не относится к базовым типам, но упомянуть всё равно стоит
+
+\`\`\`go
+type Time struct {
+	wall uint64 // настенные часы
+	ext  int64 // монотонные часы
+
+	loc *Location // инфорамция о таймзоне
+}
+\`\`\`
+
+Настенные часы предоставляют информацию о времени в компьютере. Их можно переводить назад/вперёд.
+Монотонные часы двигаются непрерывно и нужны для таймеров, time.After и прочего
+
+Таймзона:
+
+\`\`\`go
+type Location struct {
+	name string // имя локации
+	zone []zone // зоны
+	tx   []zoneTrans // переходы
+
+        // https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap08.html
+	extend string
+
+	// Кэш текущего времени, чтобы избежать поиска по zone и tx
+	cacheStart int64
+	cacheEnd   int64
+	cacheZone  *zone
+}
+
+// A zone represents a single time zone such as CET.
+type zone struct {
+	name   string // имя, например, "CET"
+	offset int    // отступ в секундах на восток от UTC
+	isDST  bool   // переводится ли время на летнее
+}
+
+// A zoneTrans represents a single time zone transition.
+type zoneTrans struct {
+	when         int64 // время перехода с UNIX 0
+	index        uint8 // индекс зоны
+	isstd, isutc bool  // ignored - no idea what these mean (да, так написали разработчики))))))
+}
+\`\`\`
+
+### Map
+
+[Здесь](https://dnonakolesax.github.io/swissmap/)
+
+### Error
+
+Чтобы сделать кастомную ошибку, нужно реализовать метод Error()
+
+\`\`\`go
+type CustomErr struct {
+    ...
+}
+
+func (ce CustomErr) Error () string {
+    ...
+}
+\`\`\`
+
+### Interface
+
+У интерфейса есть только методы:
+
+\`\`\`go
+type userRepo interface {
+	func getUser(uuid.UUID) model.User
+	func updateUser(model.User) uuid.UUID
+	func deleteUser(uuid.UUID)
+}
+
+type sqlUserRepo struct {}
+func (ur *sqlUserRepo) getUser(uuid.UUID) model.User
+func (ur *sqlUserRepo) updateUser(model.User) uuid.UUID 
+func (ur *sqlUserRepo) deleteUser(uuid.UUID) 
+\`\`\`
+
+Создать объект интерфейса нельзя, его можно только имплементировать. Чтобы структура имплементировала интерфейс, у неё должны быть реализованы все методы интерфейса. Явно нигде объявлять ничего не надо.
+
+Сам интерфейс имеет вид:
+
+\`\`\`go
+// /src/runtime/runtime2.go
+type iface struct {
+	tab  *itab
+	data unsafe.Pointer // Указатель на конкретную реализацию (sqlUserRepo, допустим)
+}
+
+// /src/internal/abi/type.go
+type Imethod struct {
+	Name NameOff // имя метода
+	Typ  TypeOff // .(*FuncType) тип функции
+}
+type InterfaceType struct {
+	Type
+	PkgPath Name      // путь для импорта
+	Methods []Imethod // методы, отсортированные по хэшу
+}
+
+// /src/internal/abi/iface.go
+type ITab struct {
+	Inter *InterfaceType // метаданные интерфейса (userRepo)
+	Type  *Type // метаданные типа, реализующего интерфейс (sqlUserRepo)
+	Hash  uint32  // hash от типа, нужен для упрощения работы type switch
+	Fun   [1]uintptr  // массив указателей на функции, которые нужно реализовать, чтобы реализовать интерфейс
+}
+// interface{} / any
+type EmptyInterface struct {
+	Type *Type // метаданные типа
+	Data unsafe.Pointer // данные типа
+}
+\`\`\`
+
+Интерфейс лучше объявлять на стороне потребителя
+### Generics
+
+\`\`\`go
+func PrintSlice[T any](s []T) {
+    for _, v := range s {
+        fmt.Println(v)
+    }
+}
+\`\`\`
+
+Будет работать для любого слайса благодаря дженерикам ([T any])
+
+Можно вместо any реализовать ограничения:
+
+\`\`\`go
+type MyConstraint interface { // указать необходимые методы
+    String() string
+}
+
+type MyConstraint interface {
+	int | int8 | int16 | int32 | int64 // или необходимые типы
+}
+\`\`\`
+
+### Function
+
+\`\`\`go
+// A *Type for each in and out parameter is stored in an array that
+// directly follows the funcType (and possibly its uncommonType). So
+// a function type with one method, one input, and one output is:
+//
+//	struct {
+//		funcType
+//		uncommonType
+//		[2]*rtype    // [0] is in, [1] is out
+//	}
+type FuncType struct {
+	Type
+	InCount  uint16
+	OutCount uint16 // top bit is set if last input parameter is ...
+}
+\`\`\`
+
+### Context
+
+Не относится к базовым типам, но упомянуть всё равно стоит
+
+\`\`\`go
+// An emptyCtx is never canceled, has no values, and has no deadline.
+// It is the common base of backgroundCtx and todoCtx.
+type emptyCtx struct{}
+type backgroundCtx struct{ emptyCtx } // пустой контекст
+type todoCtx struct{ emptyCtx } // пустой контекст, но вы его когда-нибудь сделаете
+
+type Context interface {
+	Deadline() (deadline time.Time, ok bool) 
+
+	Done() <-chan struct{} 
+
+	Err() error
+
+	Value(key any) any
+}
+\`\`\`
+
+Виды контекстов:
+
+- WithValue(Context, key any, val any) Context - возвращает родительский контекст, но с даннными в виде пары ключ-значение
+- WithCancel(Context) (Context, CancelFunc) - возвращает родительский контекст, но с функцией отмены (посылает значение в канал, возвращаемый Done())
+- WithDeadline(Context, time.Time) (Context, CancelFunc) - возвращает родительский контекст, но с функцией отмены, которую можно вызвать руками, либо она сработает сама в заданное время
+- WithTimeout(Context, time.Duration) (ctx Context, cancel CancelFunc) - аналогично WithDeadline, но используется не заданное время, а через какое время функция отмены сработает сама
+
+## Stack vs Heap
+
+Стащил хорошую картинку с ютуба : https://www.youtube.com/watch?v=ERhbEPaTQu8
+![](gomem.png)
+
+Вообще, у го своя реализация стека (можно в исходниках включить stackDebug и посмотреть, что там да как). Дефолтный размер - 2кб (на linux) для горутины (у каждой свой), но он может динамически расти (примерно как динамический массив).
+
+Рассмотрим основные сходства/различия стека и кучи:
+
+|Стек|Куча|
+|-|-|
+|Хранится в оперативке|Хранится в оперативке|
+|Переменные автоматически удаляются при выходе из scope(scope ограничен {})|Нужно удалять руками(если в языке нет GC (в Go он есть если что))|
+|Аллокации происходят быстрее (сложность добавления в стек О(1))|Аллокации происходят медленнее(скорость добавления в кучу O(log(n)))|
+|Нужно знать, сколько программа будет занимать места|Не нужно знать, сколько понадобится места|
+
+При работе со стеком нужно учитывать, что слишком глубокая рекурсия или слишком большие аллокации могут вызвать переполнение стека (stack overflow)
+При работе с кучей нужно учитывать, что ваши действия могут привести к утечке памяти. Большие данные лучше хранить на куче.
+
+Соответственно, если переменной нужно выйти за границы своего стека, она отправляется на кучу.
+
+### Escape анализ
+
+go build -gcflags "-m" покажет вам информацию о том, какие перемнные ушли на heap
+
+Всё довольно-таки понятно описано [здесь](https://tip.golang.org/src/cmd/compile/internal/escape/escape.go), я лишь переведу:
+
+Escape анализ определяет какие перменные в Go (включая аллокации с помощью new / make итд) могут быть размещены на стеке. Мы должны соблюдать два правила:
+1. Указатели на объекты стека не могут храниться на куче
+2. Указатели на объекты стека не могут существовать дольше самого объекта
+Для этого используется анализ потоков данных абстрактного синтаксического дерева (AST). Строится взвешенный орграф, где вершинами (локациями) являются переменные, аллоцированные выражениями, а рёбрами - присваивания между переменными
+Далее мы проходим по графу в поисках путей, которые могут нарушить указанные выше ограничения. Если адрес переменной v хранится в куче или в другом месте, которое может пережить ее, то v помечается как требующая аллокации на куче.
+Пример построения таких графов:
+\`\`\`go
+p = &q  // -1
+p = q     //  0
+p = *q    //  1
+p = **q   //  2
+p = **&**&q  // 2	
+\`\`\`
+Значение не может быть меньше -1, так как & можно применить только к адресуемым значениям.
+При таком анализе конструкции могут упрощаться. Например:
+
+\`\`\`go
+var x struct { f, g *int }
+var u []*int
+
+x.f = u[0]
+\`\`\`
+Эквивалентно
+\`\`\`go
+x = *u
+\`\`\`
+
+Компилятор анализирует этот граф и понимает, какая переменная куда утекает, что позволяет ему определить, куда кого отправлять.
+
+### GC
+
+GarbageCollector включается в следующих случаях:
+
+1. Количество занятой памяти увеличилось в GOGC (настраиваемая глобальная переменная) раз после крайнего запуска GC
+1. Прошло 2 минуты после крайнего запуска GC. За запуск GC по таймеру отвечает sysmon. Его можно отключить, выставив значение GOGC < 0. 
+3. Ручной вызов runtime.GC(). 
+
+
+Go использует параллельный mark and sweep. Вершины раскрашиваются в три цвета: чёрный (активный объект), серый (объект активен, но не посещены все связанные с ним объекты), белый (объект ещё не посещён). По окончании работы алгоритма все оставшиеся белыми объекты будут удалены. Вкратце, алгоритм такой:
+
+1. Покрасить все корневые объекты в серый (стек и глобальные переменные)
+2. Серые объекты пометить чёрными
+3. Объекты, на которые ссылаются чёрные, пометить серыми
+4. Если ещё есть остались серые, вернуться на второй этап
+
+Прочитаем [runtime/mgc](https://github.com/golang/go/blob/master/src/runtime/mgc.go). Всего у GC 4 рабочих состояния:
+
+1. Sweep termination
+	1.1. Stop the world. Все горутины должны достичь точек, в которых безопасно запустить GC
+	1.2. Все помеченные белым структуры стираются
+2. Mark phase. Расходует до четверти CPU.
+	2.1. Подготовка. gcphase устанавливается в состояние _GCmark, включается барьер на запись, в очередь ставятся задачи по разметке
+	2.2. Start the world. GC начинает выполнение разметки с помощью mark jobs. Все новые аллокации помечаются автоматически как чёрные. Барьер на запись затеняет как перезаписанный указатель, так и новый указатель для всех записей указателей.
+	2.3. Маркировка корневых объектов. Чтобы просканировать стек горутины, необходимо её остановить.
+	2.4. Работа с серыми объектами
+	2.5. GC использует распределенный алгоритм завершения для обнаружения отсутствия задач по маркировке корней или серых объектов (см. gcMarkDone). В этой точке GC переходит к mark termination.
+3. Mark termination
+	3.1.Stop the world
+	3.2 gcphase устанавливается в состояние _GCmarktermination, отключаются все воркеры.	
+	3.3 Выполняются работы по типу очистки mcaches
+4. Sweep phase
+	4.1 gcphase перводится в _GCoff, барьер на запись отключается
+	4.2 Start the world. Все новые аллокации теперь белые, аллоцировать можно поверх мусора.
+	4.3 GC фоном очищает помеченные как мусор значения			  
+## Конкурентность
+
+### CAS
+
+Compare and swap - атомарная инструкция (т. е. её нельзя поделить на более мелкие, а значит, нельзя прервать её выполнение выполнением другой инструкции), сравнивающая значение в памяти с одним из аргументов, и в случае успеха записывающая второй аргумент в память:
+
+\`\`\`c
+int cas( int* addr, int old, int new ) {
+  if ( *addr != old )
+    return 0;
+
+  *addr = new;
+  return 1;
+}
+\`\`\`
+Нужна, чтобы убедиться, что между процессом чтения переменной из памяти и присваиванием ей нового значения никто не вклинился. Если кто-то вклинился, уходим на второй круг, и так, пока не получится. Пример для вставки в связный список после некоторго значения:
+
+\`\`\`c
+ void ll_insert_after(struct ll_node* node, struct ll_node* new_node) {
+   struct ll_node* old_val = node->next; // запоминаем старое значение
+   while (1) {
+     new_node->next = old_val;
+     old_val = cmpxchg(&node->next, old_val, new_node); // cmpxchg == CAS. Сравнили node-next со старым значением, если всё ОК, поставили туда new_node
+     if (old_val == new_node)
+       break; // Другие потоки не меняли node->next. Успех операции, выход.
+     // Иначе повторим попытку
+   }
+ }
+ \`\`\`
+
+### GMP модель
+
+В процессе разработки языка Go разработчики столкнулись с некоторыми трудностями, которые описаны [в этом документе](https://docs.google.com/document/d/1TTj4T2JO42uD5ID9e89oa0sLKhJYD0Y_kqxDv3I3XMw/edit?tab=t.0#heading=h.mmq8lm48qfcw).
+
+В результате была придумана GMP-модель, основанная на следующих сущностях:
+
+- G - Горутина
+- M - системный поток
+- P - логический процессор - ресурс, необходимый для исполнения кода на Go. У M должен быть свой P, при этом M может висеть заблокированным или находиться в процессе системного вызова без привязанного P.
+
+У логического процессора бывают следующие состояния:
+
+1. _Pidle. Процессор простаивает. Он принадлежит листу свободных P или тому, кто переводит его состояние (если P в процессе перевода состояния)
+2. _Prunning. P используется M с целью исполнения пользовательского кода или работы шедулера. Только этот М может перевести этот P из состояния _Prunning в _Pidle(нет свободных задач), _Psyscall(при системном вызове), _Pgcstop (заморожен в интересах GC). M также может передать владение P другому M.
+3. _Psyscall. P выполняет системный вызов в интересах M, но этот M им не владеет, из-за чего P может быть украден другим M. Уход из этого состояния должен быть выполнен с помощью CAS(compare and swap)
+4. _Pgcstop - P заморожен из-за stop the world и принадлежит M, которая вызвала stop the world.
+5. _Pdead - P больше не используется из-за уменьшения GOMAXPROCS
+
+### Горутина
+
+Горутина гораздо компактнее системного треда (2кб против 8мб в линуксе). Это позволяет ускорить context switching(переключение с одной на другую)
+
+У горутины есть следующие состояния:
+
+1. _Gidle - память аллоцирована, но G не инициализирована
+
+2. _Grunnable - G в очереди на выполнение
+
+3. _Grunning - G выполняет пользовательский код. Ей присвоены свои M и P.
+
+4. _Gsyscall - G выполняет системный вызов. Ей присвоен свой M.
+
+5. _Gwaiting - G заблокирована (ждёт данных из канала, ждёт wg, ...)
+
+6. _Gmoribund_unused - не используется, но захардкожена в скриптах дебагера.
+
+7.	_Gdead - G не используется (только что закончила исполняться / только инициализировалась / в свободном листе). Стэк может быть ещё не аллоцирован. Принадлежит M, которая завершает выполнение G или забрала G из свободного листа
+
+8. _Genqueue_unused - не используется
+
+9. _Gcopystack - код не исполняется, стек G в процессе перемещения.
+
+10. _Gpreempted - G остановилась из-за suspendG.
+
+11. _Gscan - G в процессе сканирования сборщиком мусора. Используется в комбинациях:
+	11.1 _Gscanrunnable  = _Gscan + _Grunnable 
+	11.2 _Gscanrunning   = _Gscan + _Grunning  
+	11.3 _Gscansyscall   = _Gscan + _Gsyscall   
+	11.4 _Gscanwaiting   = _Gscan + _Gwaiting   
+	11.5 _Gscanpreempted = _Gscan + _Gpreempted 
+
+Общее строение горутины можно также посмотреть в рантайме:
+
+\`\`\`go
+type g struct {
+	// Stack parameters.
+	// stack describes the actual stack memory: [stack.lo, stack.hi).
+	// stackguard0 is the stack pointer compared in the Go stack growth prologue.
+	// It is stack.lo+StackGuard normally, but can be StackPreempt to trigger a preemption.
+	// stackguard1 is the stack pointer compared in the //go:systemstack stack growth prologue.
+	// It is stack.lo+StackGuard on g0 and gsignal stacks.
+	// It is ~0 on other goroutine stacks, to trigger a call to morestackc (and crash).
+	stack       stack   // offset known to runtime/cgo
+	stackguard0 uintptr // offset known to liblink
+	stackguard1 uintptr // offset known to liblink
+
+	_panic    *_panic // innermost panic - offset known to liblink
+	_defer    *_defer // innermost defer
+	m         *m      // current m; offset known to arm liblink
+	sched     gobuf
+	syscallsp uintptr // if status==Gsyscall, syscallsp = sched.sp to use during gc
+	syscallpc uintptr // if status==Gsyscall, syscallpc = sched.pc to use during gc
+	syscallbp uintptr // if status==Gsyscall, syscallbp = sched.bp to use in fpTraceback
+	stktopsp  uintptr // expected sp at top of stack, to check in traceback
+	// param is a generic pointer parameter field used to pass
+	// values in particular contexts where other storage for the
+	// parameter would be difficult to find. It is currently used
+	// in four ways:
+	// 1. When a channel operation wakes up a blocked goroutine, it sets param to
+	//    point to the sudog of the completed blocking operation.
+	// 2. By gcAssistAlloc1 to signal back to its caller that the goroutine completed
+	//    the GC cycle. It is unsafe to do so in any other way, because the goroutine's
+	//    stack may have moved in the meantime.
+	// 3. By debugCallWrap to pass parameters to a new goroutine because allocating a
+	//    closure in the runtime is forbidden.
+	// 4. When a panic is recovered and control returns to the respective frame,
+	//    param may point to a savedOpenDeferState.
+	param        unsafe.Pointer
+	atomicstatus atomic.Uint32
+	stackLock    uint32 // sigprof/scang lock; TODO: fold in to atomicstatus
+	goid         uint64
+	schedlink    guintptr
+	waitsince    int64      // approx time when the g become blocked
+	waitreason   waitReason // if status==Gwaiting
+
+	preempt       bool // preemption signal, duplicates stackguard0 = stackpreempt
+	preemptStop   bool // transition to _Gpreempted on preemption; otherwise, just deschedule
+	preemptShrink bool // shrink stack at synchronous safe point
+
+	// asyncSafePoint is set if g is stopped at an asynchronous
+	// safe point. This means there are frames on the stack
+	// without precise pointer information.
+	asyncSafePoint bool
+
+	paniconfault bool // panic (instead of crash) on unexpected fault address
+	gcscandone   bool // g has scanned stack; protected by _Gscan bit in status
+	throwsplit   bool // must not split stack
+	// activeStackChans indicates that there are unlocked channels
+	// pointing into this goroutine's stack. If true, stack
+	// copying needs to acquire channel locks to protect these
+	// areas of the stack.
+	activeStackChans bool
+	// parkingOnChan indicates that the goroutine is about to
+	// park on a chansend or chanrecv. Used to signal an unsafe point
+	// for stack shrinking.
+	parkingOnChan atomic.Bool
+	// inMarkAssist indicates whether the goroutine is in mark assist.
+	// Used by the execution tracer.
+	inMarkAssist bool
+	coroexit     bool // argument to coroswitch_m
+
+	raceignore    int8  // ignore race detection events
+	nocgocallback bool  // whether disable callback from C
+	tracking      bool  // whether we're tracking this G for sched latency statistics
+	trackingSeq   uint8 // used to decide whether to track this G
+	trackingStamp int64 // timestamp of when the G last started being tracked
+	runnableTime  int64 // the amount of time spent runnable, cleared when running, only used when tracking
+	lockedm       muintptr
+	fipsIndicator uint8
+	sig           uint32
+	writebuf      []byte
+	sigcode0      uintptr
+	sigcode1      uintptr
+	sigpc         uintptr
+	parentGoid    uint64          // goid of goroutine that created this goroutine
+	gopc          uintptr         // pc of go statement that created this goroutine
+	ancestors     *[]ancestorInfo // ancestor information goroutine(s) that created this goroutine (only used if debug.tracebackancestors)
+	startpc       uintptr         // pc of goroutine function
+	racectx       uintptr
+	waiting       *sudog         // sudog structures this g is waiting on (that have a valid elem ptr); in lock order
+	cgoCtxt       []uintptr      // cgo traceback context
+	labels        unsafe.Pointer // profiler labels
+	timer         *timer         // cached timer for time.Sleep
+	sleepWhen     int64          // when to sleep until
+	selectDone    atomic.Uint32  // are we participating in a select and did someone win the race?
+
+	// goroutineProfiled indicates the status of this goroutine's stack for the
+	// current in-progress goroutine profile
+	goroutineProfiled goroutineProfileStateHolder
+
+	coroarg   *coro // argument during coroutine transfers
+	syncGroup *synctestGroup
+
+	// Per-G tracer state.
+	trace gTraceState
+
+	// Per-G GC state
+
+	// gcAssistBytes is this G's GC assist credit in terms of
+	// bytes allocated. If this is positive, then the G has credit
+	// to allocate gcAssistBytes bytes without assisting. If this
+	// is negative, then the G must correct this by performing
+	// scan work. We track this in bytes to make it fast to update
+	// and check for debt in the malloc hot path. The assist ratio
+	// determines how this corresponds to scan work debt.
+	gcAssistBytes int64
+}
+\`\`\`
+
+Не буду всё это переводить, да и не очень это и важно на раннем этапе.
+
+### Scheduler
+
+Самое сложное. Итак, у нас есть некоторое количество G, которые нужно выполнить. Есть M, которые готовы на P эти горутины выполнять. Каким образом решается данная задача?
+
+1. Есть глобальная очередь. Отсюда G распределяются по локальным очередям
+2. Локальная очередь состоит из 1 LIFO позиции (это сделано для удобства синхронизации горутин, общающихся по каналу, чтобы свитч с одной G на вторую G, связанную с первой каналом, позволял не вытеснять из кэша процессора расшаренный между ними ресурс), остальные - FIFO. Это легко заметить на данном примере:
+\`\`\`go
+func main() {
+    runtime.GOMAXPROCS(1) // Всего один P, значит, одна локальная очередь
+
+    var wg sync.WaitGroup
+
+    wg.Add(5)
+    for i := 0; i < 5; i++ {
+        go func() {
+            fmt.Println(i)
+            wg.Done()
+        }()
+    }
+
+    wg.Wait()
+}
+// 4 0 1 2 3
+\`\`\`
+3. Если G закончила работу, у нас есть следующие варианты:
+	3.1. Взять следующую G из очереди
+	3.2. Если таких нет, украсть у рандомного P половину G (4 попытки)
+	3.3. Если остальные P пустые, проверить глобальную очередь
+	3.4. Если глобальная очередь пустая, проверить сеть
+4. Раз в 61 обращение в шедулеру проверяется глобальную очередь	
+5. G по возможности всегда исполняется на одном и том же треде, чтобы не перекидывать данные между системными тредами
+6. G переключается в моменты, встроенные компилятором (например, когда она блокируется), или когда ей скажет шедулер (горутина слишком долго исполняется или вошла в syscall) (важно чтобы она в этом моменте была в GC-safe состоянии), также можно переключить вручную с помощью runtime.Gosched()
+
+#### handoff и sysmon
+
+Если нам нужно сделать syscall, придётся занять весь системный тред. Тогда от треда открепляется его очередь и отдаётся новому потоку, а сам тред уходит в syscall. По окончании syscall'a поток резервируется для последующего использования. Поток не открепляется в short-lived syscall'ах. Если всё-таки тред завис на short-lived syscall'e, sysmon открепит от него очередь.
+
+Если горутина после syscall не помещается в очередь своего P, то она идёт в другой P. Если нет свободных P - в глобальную очередь
+
+#### netpoller
+
+При открытии сокета (который по сути - файловый дескриптор), добавляем его в мультиплексор (epoll (event poll) в linux/kqueue в mac). Это такая штука, которая позволяет читать данные сразу с нескольких дескрипторов. Когда в тот или иной дескриптор придут данные, он пошлёт сигнал. Это может происходить как event loop и в отдельном треде, и в P. 
+
+### Канал
+
+Канал нужен для синхронизации двух горутин.
+
+Как только канал не нужен, его можно закрыть
+
+При чтении из закрытого канала вернётся нулевое значение, при записи - panic
+
+Range по каналу читает, пока канал не закроется.
+
+Пример:
+
+\`\`\`go
+func main() {
+	nums := []int{1,2,3,4,5,6,7,8,9,10}
+
+	ch1 := make(chan int)
+	ch2 := make(chan int)
+
+	go func() {
+		for _, num := range nums {
+			ch1 <- num // посылаем информацию во вторую G
+		}
+		close(ch1) // прекращаем подачу информации во вторую G
+	}()
+
+	go func() {
+		for num := range ch1 { // читаем из первой G
+			ch2 <- num * num  // посылаем в основную G
+		}
+		close(ch2) // прекращаем подачу информации в основную G
+	}()
+
+	for n := range ch2 { // читаем из второй G
+		fmt.Println(n)
+	}
+}
+\`\`\`
+
+Структура канала:
+
+\`\`\`go
+type hchan struct {
+	qcount   uint           // total data in the queue
+	dataqsiz uint           // size of the circular queue
+	buf      unsafe.Pointer // points to an array of dataqsiz elements
+	elemsize uint16
+	closed   uint32
+	elemtype *_type // element type
+	sendx    uint   // send index
+	recvx    uint   // receive index
+	recvq    waitq  // list of recv waiters
+	sendq    waitq  // list of send waiters
+
+	// lock protects all fields in hchan, as well as several
+	// fields in sudogs blocked on this channel.
+	//
+	// Do not change another G's status while holding this lock
+	// (in particular, do not ready a G), as this can deadlock
+	// with stack shrinking.
+	lock mutex
+}
+\`\`\`
+
+### Workgroup
+
+Функция (в том числе main) завершается тогда, когда завершается её горутина: ждать остальных она не обязана. Для того, чтобы избежать этого, мы используем waitgroup. Рассмотрим предыдущий пример:
+
+\`\`\`go
+func main() {
+    runtime.GOMAXPROCS(1) // Всего один P, значит, одна локальная очередь
+
+    var wg sync.WaitGroup
+
+    wg.Add(5)
+    for i := 0; i < 5; i++ {
+        go func() {
+            fmt.Println(i)
+            wg.Done()
+        }()
+    }
+
+    wg.Wait()
+}
+\`\`\`
+
+Здесь мы говорим wg, что хотим подождать 5 горутин, после чего запускаем 5 горутин, в каждой из них по завершении уменьшаем счётчик ожидаемых горутин на единицу (wg.Done()). В конце программы мы ждём, пока счётчик ожидаемых горутин будет равен нулю (wg.Wait()). По сути, Add и Done просто редактируют атомарный счётчик, а Wait в бесконечном цикле читает его, пока тот не станет 0.
+
+### Mutex
+
+Предположим, у нас есть следующий код:
+
+\`\`\`go
+func main() {
+	wg := &sync.WaitGroup{}
+
+	map1 := make(map[int]int)
+
+	wg.Add(1000)
+	for i := 0; i < 1000; i++ {
+		go func(i int) {
+			defer wg.Done()
+			map1[i] = i
+		}(i)
+	}
+	wg.Wait()
+}
+\`\`\`
+
+Запускаем и получаем ошибку - concurrent map writes. Добавим мьютекс, чтобы не было такой проблемы:
+
+\`\`\`go
+func main() {
+	mx := &sync.Mutex{}
+	wg := &sync.WaitGroup{}
+
+	map1 := make(map[int]int)
+
+	wg.Add(1000)
+	for i := 0; i < 1000; i++ {
+		go func(i int) {
+			defer wg.Done()
+			defer mx.Unlock()
+			mx.Lock()
+			map1[i] = i
+		}(i)
+	}
+	wg.Wait()
+}
+\`\`\`
+
+Каждый раз, когда программа натыкается на mx.Lock(), она проверяет, заблокирован ли мьютекс. Если да - ждёт разблокировки, если нет - блокирует сама и разблокирует только при вызове mx.Unlock().
+
+### Semaphore
+
+Допустим, нам нужно ограничить количество походов в сторонний сервис. Для этого можно использовать семафор, сделанный из буферезированного канала:
+
+\`\`\`go
+semaphore := make(chan any, 100)
+
+var activeConnections atomic.Int64
+
+for {
+	go func() {
+		semaphore <- struct{}{}
+		activeConnections.Add(1)
+		println("active connections:", activeConnections.Load())
+		time.Sleep(time.Second) // ушли в далёкий сервис
+		activeConnections.Add(-1)
+		<-semaphore
+	}()
+}
+\`\`\`
+Запустим программу и увидим, что рано или поздно количество активных соединений будет стабильно равно 100.
+
+### Select
+
+Позволяет одновременно читать сразу из двух каналов (кто быстрее):
+
+\`\`\`go
+	ch1 := make(chan int64)
+	ch2 := make(chan int64)
+
+	go func() {
+		randVal := rand.Int63n(100)
+		println("1 gonna sleep", randVal, "ms")
+		time.Sleep(time.Microsecond*time.Duration(randVal))
+		ch1 <- randVal
+	}()
+	go func() {
+		randVal := rand.Int63n(100)
+		println("2 gonna sleep", randVal, "ms")
+		time.Sleep(time.Microsecond*time.Duration(randVal))
+		ch2 <- randVal
+	}()
+
+	select {
+		case msg1 := <-ch1:
+			println("1 woke earlier and sent", msg1)
+		case msg2 := <-ch2:
+			println("2 woke earlier and sent", msg2)
+	}
+\`\`\`
+
+Вывод:
+\`\`\`js
+2 gonna sleep 35 ms
+1 gonna sleep 71 ms
+2 woke earlier and sent  35
+\`\`\`
+
+### Livelock
+
+Про deadlock знают все, а вот про возможность выстрелить себе в ногу с помощью livelock - не только лишь все. Подлость livelock в том, что программа вроде бы работает, но ничего полезного не делает. Рассмотрим такой вот пример:
+
+\`\`\`go
+mx1 := &sync.Mutex{}
+mx2 := &sync.Mutex{}
+
+wg := &sync.WaitGroup{}
+wg.Add(2)
+
+for i := 0; i < 2; i++ {
+	go func () {
+		defer wg.Done()
+		locked1 := false
+		locked2 := false
+
+		for !locked1 || !locked2 {
+		    locked1 = mx1.TryLock()
+			time.Sleep(time.Millisecond)
+		    locked2 = mx2.TryLock()
+			time.Sleep(time.Millisecond)
+		}
+
+		mx1.Unlock()
+		mx2.Unlock()
+
+		println("G done")
+	}()
+}
+
+wg.Wait()
+\`\`\`
+
+Если вы вдруг забыли: tryLock() пытается захватить мьютекс, если не получилось - идёт дальше. Запускаем, вроде всё норм - вывелось два раза "G done" и прекратило работу. Запускаем ещё раз и программа зависла намертво, при этом дедлока не вылетело. Что случилось?
+1. G1 захватила mx1 и прервалась. Шедулер отдал управление G2.
+2. G2 не смогла захватить mx1 и захватила mx2.
+3. G1: locked1 = true, locked = false. G2: locked1 = false, locked2 = true. Цикл у обеих G будет крутиться бесконечно.
+
+### Конвейер и суперскалярность
+
+Каждую команду можно разбить на несколько задач, выполняемых за один такт процессора. Например: instruction fetch, instruction decode, read data, execute, write back. Если каждый блок микропроцессора по отдельности отвечает за эти команды, можно добиться параллелинга:
+
+||1|2|3|4|5|6|7|8|9|10|
+|-|-|-|-|-|-|-|-|-|-|-|
+|i|IF|ID|RD|EX|WB||||||
+|i+1||IF|ID|RD|EX|WB|
+|i+2|||IF|ID|RD|EX|WB|
+|i+3||||IF|ID|RD|EX|WB|
+|i+4|||||IF|ID|RD|EX|WB|
+|i+5||||||IF|ID|RD|EX|WB|
+
+Такой подход может привести к следующим ошибкам:
+1. Неоднородные структуры команд
+2. Разная длина команд
+3. Зависимость одной команды от другой (RAW, WAW, WAR)
+
+Но в целом жёстко ускоряет вычисления
+
+### Векторизация
+
+Когда-то все процессы были одноядерными и относились к классу SISD (SINGLE INSTRUCTION - SINGLE DATA)
+Современные процессоры многоядерные, что позволяет относить их к классу MIMD (MULTIPLE INSTRUCTIONS - MULTIPLE DATA)
+Однако у MIMD есть свои проблемы: оно, например, абсолютно не подходит для графики. Именно поэтому для запуска хоть сколько-то требовательных игр требуется отдельная видеокарта. Дело в том, что отрисовка картинки состоит из однообразных задач, т. е. нужно применить одну инструкцию к большому количеству данных. Отсюда появляется следующий класс - SIMD (SINGLE INSTRUCTION - MULTIPLE DATA). Помимо видеоигр, такие устройства подойдут для любых математических вычислений(в основе отрисовки картинки для игры лежит программа университетской линейной алгебры, почитайте, например, про кватернион). Например, нам нужно сложить два вектора:
+\`\`\`go
+func sumVecs(vec1 []float64, vec2 []float64) []float64
+\`\`\`
+Очевидно, такую задачу можно распараллелить (векторизовать), поделив размеры векторов на количество доступных воркеров и запустив их параллельно (не конкурентно, так как все имеют доступ к своей части вектора).
+
+### Прерывания
+
+Прерывание можно вызвать в любом месте программы. Оно передаёт управление обработчику прерываний, который возобновит выполнение программы при выполнении определённых условий (например, программа может прерваться на время ожидания данных с диска или другой периферии)
+
+### MMU/TLB
+
+Предварительно познакомимся с двумя понятиями:
+
+1. Пейджинг. Разбиение памяти компьютера на страницы. Если файл больше страницы, он занимает несколько страниц. Если файл меньше страницы, он занимает всю страницу (например, если у вас n файлов по 1 байту, а размер страницы - 4кб, вас может ждать неприятный сюрприз: занято будет n*4 кб памяти(а ещё помните, что inode не бесконечны, и их размер считается исходят из того, что файлы будут точно больше страницы)). Этот способ позволяет загружать файлы из памяти по частям, чтобы при запуске фотошопа не сожрать сразу половину памяти
+2. Своппинг. Если у вас закончилось место в оперативке - просто начните писать на диск (гениально!!!). Своппинг создаст файл подкачки, который будет скидывать данные из оперативной памяти на диск, тем самым, естественно, замедляя ваш компьютер
+
+Теперь нужно как-то определиться с адресацией. Мы предполагаем, что у каждого процесса есть свои границы адресов, за пределы которых он выйти не может. Однако как в таком случае быть с адресацией к данным, лежащим на диске, а не в оперативной памяти? Для этого было изобретено понятие виртуальной памяти (то, что украдено с диска). Размер файла подкачки в Windows можно посмотреть в диспетчере задач: у меня на ноуте, например файл подкачки имеет размер 20гб, тогда как оперативки всего 16 (и ещё 3гб в кэше, итого выделено 38.4 (600 мб оперативки зарезервировано аппаратно)). В работе с этим помогают следующие устройства:
+
+1. MMU - Memory Management Unit - устройство для аппаратной поддержки виртуальной памяти. Позволяет транслировать виртуальные адреса в физические
+2. TLB - Translation Looakside Buffer - хранит соответствие физический адрес - виртуальный адрес
+
+Возможные проблемы:
+
+1. Омонимы - разные физические адреса отображаются на один и тот же виртуальный
+2. Синонимы - разные виртуальные адреса отображаются на один и тот же физический
+
+### TRUE/FALSE SHARING
+
+Процессор скопировал себе в кэш-линию слово
+
+1. False sharing - два потока редактируют разную часть слова, нужно время на работу MESI
+2. True sharing - два потока редактируют одну и ту же часть слова, чё делать - непонятно
+
+\`\`\`go
+struct sample {
+    a int
+    b int
+}
+
+func falseSharing(s sample) {
+    go func() {
+        s.a = 10
+    }()              // будет работать медленнее из-за MESI
+    go func() {
+        s.b = 20
+    }()
+}
+
+func trueSharing (s sample) {
+    go func() {
+        s.a = 10
+    }()             // unexpected behaviour
+    go func() {
+        s.a = 20
+    }()
+}
+
+\`\`\`
+
+### RCU
+
+RCU (Read-Copy-Update) - технология для реализации lock-free структур, аналог spin-lock. Вместо редактирования некоторой структуры данных создаём её копию, а затем атомарно меняем указатель на саму структуру.
+
+### Cache contention
+
+Рассмотрим мапу с RWMutex. В коде rwmutex есть счётчик readerCount, который увеличивается при очередной блокировке на чтение. Если какое-то ядро обновило счётчик, ей нужно оповестить об этом другие ядра. Если захвать ReadMutex происходит слишком часто, в кэше выстраивается очередь из желающих обновить счётчик, что приводит к проблеме, называемой cache contention. Если вы встретились с такой проблемой, можно воспользоваться sync.Map, которая делит мапу на "грязную" и "чистую". Из чистой можно читать и при этом не блокироваться
+
+### MESI
+
+Кэш-линия процессора может находиться в одном из четырёх состояний:
+
+- Modified - Значение находится только в одном блоке и оно отличается от значения в памяти
+- Exclusive - Значение находится только в одном блоке и оно совпадает с памятью
+- Shared - Значение находится в нескольких блоках
+- Invalid - Значение неактуально
+
+Для любых двух кэш-линий справедливы следующие возможные состояния:
+||M|E|S|I|
+|-|-|-|-|-|
+|M|x|x|x|v|
+|E|x|x|x|v|
+|S|x|x|v|v|
+|I|v|v|v|v|
+
+Если кэш-линия Modified или Exclusive, её копии - Invalid. Если кэш-линия Shared, её копии Shared или Invalid. Если кэш-линия Invalid, её копии могут находиться в любом состоянии.
+
+Переход между состояниями возможен по следующим сигналам:
+
+- PrRd / PrWr - процессор хочет что-то прочитать или записать в блок
+- BusRd - другой процессор хочет что-то прочитать 
+- BusRdX / BusUpgr - другой процессор хочет что-то записать в блок, но у него ещё нет / уже есть это значение в своём блоке
+- Flush / FlushOpt - блок записывается обратно в память / передаётся другому процессору (из кэша в другой кэш)
+
+Конечный автомат:
+
+![mesi](https://storage.yandexcloud.net/gpages/mesi.png)
+
+### ABA Problem
+
+Рассмотрим односвязный lock-free список. Пусть две горутины редактируют один и тот же список. Порядок работ такой:
+
+1. Изначально стек имеет вид top -> A -> B -> C
+2. G1 хочет удалить A. Она читает его из памяти и читает новый топ списка (B), но прерывается перед CAS.
+3. G2 удаляет A и B. Теперь список имеет вид top -> C
+4. G2 вставляет A обратно по тому же адресу. Список: top -> A -> C
+5. G2 уступает место G1. G1 выполняет CAS(A,A,B). CAS проходит, так как A всё ещё жива и всё ещё располагается по тому же адресу. Однако, B уже не существует, а CAS заменяет A на B, что приводит к непредсказуемому исходу
+
+В Go есть Garbage Collector, который предотвращает такие ситуации (у G1 ещё есть ссылка на старый А, поэтому он эту область памяти не почистит). Однако, для общего развития рассмотрим некоторые популярные решения проблемы:
+
+#### Версионирование указателя
+
+На 32-разрядных системах был доступен double-word CAS, т. е. можно было к 32-битному указателю приклеить ещё 32 бита невероятно полезной информации. Умные люди предложили приклеить к указателю 32-битный счётчик, который будет увеличиваться каждый CAS, чтобы избежать такой проблемы. Однако, на актуальных 64-битных системах dwCAS недоступен. Знатоки скажут, что для адресации используется всего 48 бит, но, во-первых, учёные посчитали, что 16 бит хватать не будет, а во-вторых - слишком большой overhead.
+
+#### Hazard pointers
+
+Захваченный элемент помещаем в список "опасных" указателей, чтобы не очистить занятую им память
+
+## Web
+
+### Frameworks
+
+1. Gin - самый популярный
+2. Fiber - получше с производительностью, так как сделан поверх fasthttp
+3. Echo - тоже неплохой
+
+Упрощают работу с авторизациями, middleware, роутингом и таймаутами. В целом, ничего не мешает сделать хорошо и на net/http (разве что проблемы с таймаутами). Роутер для net/http - gorilla/mux. 
+
+### Logs
+
+https://betterstack.com/community/guides/logging/best-golang-logging-libraries/
+
+Чистая вкусовщина. Кстати, не забывайте писать в stdout, по величайшим заветам 12FA.
+
+## Tools
+
+1. goreportcard
+2. golangci-lint
+// TODO 
+
+## Примеры задач
+
+### Сливаем каналы в один
+
+\`\`\`go
+package main
+
+import (
+	"sync"
+)
+
+func joinChannels(chs ...<-chan int) <-chan int {
+	mergedCh := make(chan int)
+
+	go func() {
+		wg := &sync.WaitGroup{}
+
+		wg.Add(len(chs))
+
+		for _, ch := range chs {
+			go func(ch <-chan int, wg *sync.WaitGroup) {
+				defer wg.Done()
+				
+				for id := range ch {
+					mergedCh <- id
+				}
+			}(ch, wg)
+		}
+
+		wg.Wait()
+		close(mergedCh)
+	}()
+
+	return mergedCh
+}
+\`\`\`
+
+
+### Пишем WorkerPool
+
+\`\`\`go
+package main
+
+import (
+	"fmt"
+)
+
+func worker(id int, f func(int) int, jobs <-chan int, results chan<- int) {
+    for j := range jobs {
+        results <- f(j)    // читаем джобы в рамках одной и той же горутины
+    }
+}
+
+func main() {
+
+    const numJobs = 5
+    jobs := make(chan int, numJobs)
+    results := make(chan int, numJobs)
+
+    multiplier := func(x int) int {
+	    return x * 10
+    }
+
+    for w := 1; w <= 3; w++ {
+        go worker(w,  multiplier, jobs, results) // запускаем одну горутину для джоб
+    }
+
+    for j := 1; j <= numJobs; j++ {
+        jobs <- j                            // пишем джобы в канал
+    }
+    
+    close(jobs)
+
+    for i := 1; i <= numJobs; i++ {
+        fmt.Println(<-results)
+    }
+}
+\`\`\`
+
+### Конвейер чисел
+
+\`\`\`go
+package main
+
+import (
+	"fmt"
+)
+
+func main() {
+	naturals := make(chan int)
+	squares := make(chan int)
+
+	go func() {
+		for x := 0; x <= 10; x++ {
+			naturals <- x
+		}
+		
+		close(naturals)
+	}()
+
+	go func() {
+		for x := range naturals {
+			squares <- x * x
+		}
+		
+		close(squares)
+	}()
+
+	for x := range squares {
+		fmt.Println(x)
+	}
+}
+\`\`\`
+
+### RNG
+
+\`\`\`go
+package main
+
+import (
+	"fmt"
+	"math/rand"
+)
+
+func randNumsGenerator(n int) <-chan int {
+	out := make(chan int)
+	go func() {
+		for i := 0; i < n; i++ {
+			out <- rand.Intn(n)
+		}
+		close(out)
+	}()
+	return out
+}
+
+func main() {
+	for num := range randNumsGenerator(10) {
+		fmt.Println(num)
+	}
+}
+\`\`\`
+
+### Сходить в три реплики:
+
+\`\`\`go
+func main() {
+	mc := memcache.New("172.29.0.6:11211")
+	mc2 := memcache.New("172.29.0.4:11211")
+	mc3 := memcache.New("172.29.0.5:11211")
+	replicas := []*memcache.Client{mc, mc2, mc3}
+
+	for _, client := range replicas {
+		client.Set(&memcache.Item{Key: "foo", Value: []byte("my value")})
+	}
+
+	channel := make(chan string)
+	done := &atomic.Int64{}
+	done.Store(0)
+
+	for i := range replicas {
+		go func(i int) {
+			item, err := replicas[i].Get("foo")
+			toSend := (string(item.Value) + fmt.Sprint(i))
+			if err == nil {
+				if done.CompareAndSwap(0, 1) {
+					channel <- toSend
+					close(channel)
+				}
+			} 
+		}(i)
+	}
+
+	ch0 := <-channel
+	println("data from ch", ch0)
+}
+\`\`\`
+
+
+### Сходить в медленный сторонний ресурс:
+
+\`\`\`go
+func visit (mc *memcache.Client, ctx context.Context) (string, error) {
+	respChan := make(chan string)
+	errChan := make(chan error)
+
+	go func() {
+		val, err := mc.Get("foo")
+		if err != nil {
+			errChan <- err
+		} else {
+			respChan <- string(val.Value)
+		}
+		close (respChan)
+		close (errChan)
+	}()
+
+	select {
+		case <-ctx.Done():
+			return "", fmt.Errorf("ctx timeout")
+		case val := <-respChan:
+			return val, nil	
+		case err := <-errChan:
+			return "", err	
+	}
+}
+
+func main() {
+	mc := memcache.New("172.29.0.6:11211")
+	mc.Set(&memcache.Item{Key: "foo", Value: []byte("my value")})
+
+	ctx := context.Background()
+
+	ctx2, _ := context.WithTimeout(ctx, time.Nanosecond)
+
+	str, err := visit(mc, ctx2)
+
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		fmt.Println(str)
+	}
+}
+\`\`\`
             `
             const marked = new Marked(
 								  markedHighlight({

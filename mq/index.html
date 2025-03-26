@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>leetbase</title>
+    <title>VKAT V GO</title>
 	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.1/styles/github.min.css">
     <style>
         body {
             font-family: Arial, sans-serif;
             margin: 10px 0 10px 0;
         }
+		img {
+			width: 100%
+		}
         #html-output {
             margin-bottom: 20px;
 			margin-left: auto;
@@ -37,8 +40,196 @@
         function convertMarkdown() {
 			const { Marked } = globalThis.marked;
 			const { markedHighlight } = globalThis.markedHighlight;
-            const markdown = `
-            TODO
+            const markdown = `# MQ
+## Kafka
+
+Распределенный реплицированный журнал фиксации изменений (commit log)
+
+- Распределенный, поскольку Kafka развертывается как кластер узлов, как для устойчивости к ошибкам, так и для масштабирования
+- Реплицированный, поскольку сообщения обычно реплицируются на нескольких узлах (серверах).
+- Журнал фиксации изменений, потому что сообщения хранятся в сегментированных, append-only журналах, которые называются топиками. Эта концепция журналирования является основным уникальным преимуществом Kafka.
+
+Вместо того, чтобы помещать сообщения в очередь FIFO и отслеживать статус этого сообщения в очереди, как это делает RabbitMQ, Kafka просто добавляет его в журнал, и на этом все. Удаляется оно в соответствии с политикой удерживания данных.
+
+Простой примерки отправки:
+
+\`\`\`go
+// to produce messages
+topic := "my-topic"
+partition := 0
+
+conn, err := kafka.DialLeader(context.Background(), "tcp", "localhost:9092", topic, partition)
+if err != nil {
+    log.Fatal("failed to dial leader:", err)
+}
+
+conn.SetWriteDeadline(time.Now().Add(10*time.Second))
+_, err = conn.WriteMessages(
+    kafka.Message{Value: []byte("one!")},
+    kafka.Message{Value: []byte("two!")},
+    kafka.Message{Value: []byte("three!")},
+)
+if err != nil {
+    log.Fatal("failed to write messages:", err)
+}
+
+if err := conn.Close(); err != nil {
+    log.Fatal("failed to close writer:", err)
+}
+\`\`\`
+
+Простой пример получения:
+
+\`\`\`go
+// to consume messages
+topic := "my-topic"
+partition := 0
+
+conn, err := kafka.DialLeader(context.Background(), "tcp", "localhost:9092", topic, partition)
+if err != nil {
+    log.Fatal("failed to dial leader:", err)
+}
+
+conn.SetReadDeadline(time.Now().Add(10*time.Second))
+batch := conn.ReadBatch(10e3, 1e6) // fetch 10KB min, 1MB max
+
+b := make([]byte, 10e3) // 10KB max per message
+for {
+    n, err := batch.Read(b)
+    if err != nil {
+        break
+    }
+    fmt.Println(string(b[:n]))
+}
+
+if err := batch.Close(); err != nil {
+    log.Fatal("failed to close batch:", err)
+}
+
+if err := conn.Close(); err != nil {
+    log.Fatal("failed to close connection:", err)
+}
+\`\`\`
+
+Для управления кластером используется резидентная kv-база данных - zookeeper, которая хранит различные метаданные.
+
+
+## RabbitMQ
+
+- Паблишеры (publishers) отправляют сообщения на exchange’и
+- Exchange’и отправляют сообщения в очереди и в другие exchange’и
+- RabbitMQ отправляет подтверждения паблишерам при получении сообщения
+- Получатели (consumers) поддерживают постоянные TCP-соединения с RabbitMQ и объявляют, какую очередь(-и) они получают
+- RabbitMQ проталкивает (push) сообщения получателям
+- Получатели отправляют подтверждения успеха/ошибки
+- После успешного получения, сообщения удаляются из очередей
+
+Простой пример отправки:
+
+\`\`\`go
+package main
+
+import (
+	"log"
+
+	amqp "github.com/rabbitmq/amqp091-go" // Делаем удобное имя для импорта в нашем коде
+)
+
+func main() {
+	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/") // Создаем подключение к RabbitMQ
+	if err != nil {
+		log.Fatalf("unable to open connect to RabbitMQ server. Error: %s", err)
+	}
+
+	defer func() {
+		_ = conn.Close() // Закрываем подключение в случае удачной попытки
+	}()
+
+    ch, err := conn.Channel()
+	if err != nil {
+		log.Fatalf("failed to open channel. Error: %s", err)
+	}
+	
+	defer func() {
+		_ = ch.Close() // Закрываем канал в случае удачной попытки открытия
+	}()
+
+    	q, err := ch.QueueDeclare(
+		"hello", // name
+		false,   // durable
+		false,   // delete when unused
+		false,   // exclusive
+		false,   // no-wait
+		nil,     // arguments
+	)
+	if err != nil {
+		log.Fatalf("failed to declare a queue. Error: %s", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	body := "Hello World!"
+	err = ch.PublishWithContext(ctx,
+		"",     // exchange
+		q.Name, // routing key
+		false,  // mandatory
+		false,  // immediate
+		amqp.Publishing{
+			ContentType: "text/plain",
+			Body:        []byte(body),
+		})
+	if err != nil {
+		log.Fatalf("failed to publish a message. Error: %s", err)
+	}
+
+	log.Printf(" [x] Sent %s\n", body)
+}
+\`\`\`
+
+Простой пример получения:
+
+\`\`\`go
+package main
+
+import (
+	"log"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+)
+
+func main() {
+	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	if err != nil {
+		log.Fatalf("unable to open connect to RabbitMQ server. Error: %s", err)
+	}
+
+	defer func() {
+		_ = conn.Close() // Закрываем подключение в случае удачной попытки подключения
+	}()
+	
+	ch, err := conn.Channel()
+	if err != nil {
+		log.Fatalf("failed to open a channel. Error: %s", err)
+	}
+
+	defer func() {
+		_ = ch.Close() // Закрываем подключение в случае удачной попытки подключения
+	}()
+
+	q, err := ch.QueueDeclare(
+		"hello", // name
+		false,   // durable
+		false,   // delete when unused
+		false,   // exclusive
+		false,   // no-wait
+		nil,     // arguments
+	)
+	if err != nil {
+		log.Fatalf("failed to declare a queue. Error: %s", err)
+	}
+}
+\`\`\`
             `
             const marked = new Marked(
 								  markedHighlight({
