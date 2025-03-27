@@ -42,6 +42,8 @@
 			const { markedHighlight } = globalThis.markedHighlight;
             const markdown = `# Linux
 
+[Назад](https://dnonakolesax.github.io/index.html)			
+
 ## Соединения
 
 Количество соединений в linux ограничено количеством файловых дескрипторов:
@@ -75,6 +77,72 @@ Netstat — сетевая утилита командной строки в Lin
 Cписок процессов: ps 
 Послать сигнал KILL {procID}
 Адресное пространство: cat /proc/{procId}/maps
+
+
+<details>
+<summary>WIP: Подробнее про содержимое proc/{procId}</summary>
+<p>
+    https://man7.org/linux/man-pages/man5/
+
+    arch_status 
+    attr
+    auxv  
+    cgroup 
+    clear_refs
+    cmdline - команда, которой был запущен процесс
+    comm
+    coredump_filter
+    cpuset
+    cwd - линк на рабочую директорию
+    environ - переменные окружения
+    exe - линк на исполняемый файл
+    fd - директория с файловыми дескрипторами
+    fdinfo - директория со сведениями о файловых дескрипторах (смещение, модификаторы доступа, номер inode)
+    gid_map
+    io
+    limits - ограничения процесса (cpu time, file size, stack size, open files)
+    loginuid
+    map_files
+    maps - области памяти процесса и модификаторы доступа к ним
+    mem - память процесса
+    mountinfo - информация о подмонтированных файловых системах
+    mounts
+    mountstats
+    net - сетевая информация
+    ns - namespaces
+    oom_adj - более тонкая корректировка (можно поставить -17 и процесс никогда не будет убит)
+    oom_score - рейтинг OOM-киллера (чем выше, тем быстрее OOM убьёт процесс)
+    oom_score_adj - корректировка рейтинга (отрицательная - меньше шансов)
+    pagemap
+    personality
+    projid_map
+    root - линк на /root
+    sched
+    schedstat
+    sessionid
+    setgroups
+    smaps
+    smaps_rollup
+    stack - стек ядра
+    stat - статистика ядра системы
+    statm
+    status - статус и потребление памяти
+    syscall - выполняемый в данный момент syscall
+    task - директория с поддиректориями для каждого из тредов
+    timens_offsets
+    timers - таймеры процесса
+    timerslack_ns
+    uid_map
+    wchan
+</p>
+</details>
+
+Все дескрипторы процесса: /proc/{procId}/fd
+0,1,2 - всегда stdin, stdout, stderr
+19,20,21 - в случае на скрине их использует vscode для расширения remote containers
+Остальное - сокеты http-сервера
+
+![catproc](https://storage.yandexcloud.net/gpages/catpid.png)
 
 Информация о CPU: cat /proc/cpuinfo
 Информация о памяти: cat /proc/meminfo

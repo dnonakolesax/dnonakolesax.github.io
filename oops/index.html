@@ -10,6 +10,9 @@
             font-family: Arial, sans-serif;
             margin: 10px 0 10px 0;
         }
+		img {
+			width: 100%
+		}
         #html-output {
             margin-bottom: 20px;
 			margin-left: auto;
@@ -38,7 +41,8 @@
 			const { Marked } = globalThis.marked;
 			const { markedHighlight } = globalThis.markedHighlight;
             const markdown = ` # DevOps for backenders
-            # devops
+
+[Назад](https://dnonakolesax.github.io/index.html)
 
 ## Docker
 
@@ -66,6 +70,45 @@ Docker Engine — это клиент-серверная платформа дл
 ### Logs
 
 Отдельно пишутся логи демона(процесс работы докера), отдельно каждого контейнера(процесс работы приложений в контейнере)
+
+### Multistage
+
+Поскольку приложение на Go компилится в исполняемый файл, нет смысла тащить за собой всю несносную тяжесть бытия. Можно собрать его в одном контейнере, а запустить хоть в scratch (в зависимости от ваших требований):
+
+\`\`\`yaml
+FROM golang:1.24 as modules
+
+ADD go.mod go.sum /m/
+RUN cd /m && go mod download
+
+# Собираем бинарники
+FROM golang:1.24 as builder
+
+COPY --from=modules /go/pkg /go/pkg
+
+# Добавляем юзера без прав в целях безопасности, работать будем от его имени
+RUN useradd -u 10001 apprunner
+
+RUN mkdir -p /app
+ADD . /app
+WORKDIR /app
+
+# Собираем бинарь
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+    go build -o ./bin/app ./cmd/app
+
+# Здесь уже запускаем
+FROM scratch
+
+# Забираем нашего юзера без прав из прошлого контейнера
+COPY --from=builder /etc/passwd /etc/passwd
+USER appuser	
+
+# Забираем бинарник
+COPY --from=builder /app/bin/app /app
+
+CMD ["/app"]
+\`\`\`yaml
 
 ## Kuber
 

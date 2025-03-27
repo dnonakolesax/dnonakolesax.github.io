@@ -41,6 +41,9 @@
 			const { Marked } = globalThis.marked;
 			const { markedHighlight } = globalThis.markedHighlight;
             const markdown = `# MQ
+
+[Назад](https://dnonakolesax.github.io/index.html)
+
 ## Kafka
 
 Распределенный реплицированный журнал фиксации изменений (commit log)
@@ -124,6 +127,13 @@ if err := conn.Close(); err != nil {
 - Получатели отправляют подтверждения успеха/ошибки
 - После успешного получения, сообщения удаляются из очередей
 
+Типы exchange:
+
+- Fanout - посылает сообщения во все очереди
+- Direct - посылает сообщение в топик строго по ключу
+- Topic - посылает сообщение в топик, если в ключе содержится нужное слово
+- Headers - указываются заголовки и требования к ним для попадания в ту или иную очередь
+
 Простой пример отправки:
 
 \`\`\`go
@@ -145,7 +155,7 @@ func main() {
 		_ = conn.Close() // Закрываем подключение в случае удачной попытки
 	}()
 
-    ch, err := conn.Channel()
+    ch, err := conn.Channel() - канал, средство для взаимодействия с RabbitMQ. Можно создать несколько на соединение, но так делать не стоит
 	if err != nil {
 		log.Fatalf("failed to open channel. Error: %s", err)
 	}
@@ -154,13 +164,13 @@ func main() {
 		_ = ch.Close() // Закрываем канал в случае удачной попытки открытия
 	}()
 
-    	q, err := ch.QueueDeclare(
+    	q, err := ch.QueueDeclare(                       // на самом деле publisher может декларировать и exchange с binding
 		"hello", // name
-		false,   // durable
-		false,   // delete when unused
-		false,   // exclusive
-		false,   // no-wait
-		nil,     // arguments
+		false,   // durable - очередь сохранит состояние после перезапуска сервера
+		false,   // delete when unused - очередь сама себя удалит когда надоест
+		false,   // exclusive - только один потребитель
+		false,   // no-wait - ждать ли confirm от потребителя
+		nil,     // arguments - ttl сообщения и очереди, максимальное число сообщений в очереди и прочее
 	)
 	if err != nil {
 		log.Fatalf("failed to declare a queue. Error: %s", err)
@@ -171,10 +181,10 @@ func main() {
 
 	body := "Hello World!"
 	err = ch.PublishWithContext(ctx,
-		"",     // exchange
-		q.Name, // routing key
-		false,  // mandatory
-		false,  // immediate
+		"",     // exchange - маршрутизатор, который выбирает с помощью binding, в какие очереди слать сообщение
+		q.Name, // routing key - ключ для маршрутизатора
+		false,  // mandatory - отправить ли назад сообщение, если не удалось поставить его в очередь
+		false,  // immediate - отправить сообщение только если есть хотя бы один готовый его принять получатель
 		amqp.Publishing{
 			ContentType: "text/plain",
 			Body:        []byte(body),
@@ -228,6 +238,30 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to declare a queue. Error: %s", err)
 	}
+
+		messages, err := ch.Consume(
+		q.Name, // queue - имя очереди
+		"",     // consumer - имя, которое сервер будет использовать для различения доставленных сообщений. Проще забить и оставить пустым, тогда будет значение по умолчанию
+		true,   // auto-ack вот это очень плохо, никогда так не делайте, а то потеряется сообщение
+		false,  // exclusive
+		false,  // no-local - не реализовано в RabbitMQ =)
+		false,  // no-wait 
+		nil,    // args
+	)
+	if err != nil {
+		log.Fatalf("failed to register a consumer. Error: %s", err)
+	}
+
+	var forever chan struct{}
+
+	go func() {
+		for message := range messages {
+			log.Printf("received a message: %s", message.Body)
+		}
+	}()
+
+	log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
+	<-forever
 }
 \`\`\`
             `

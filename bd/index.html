@@ -119,6 +119,36 @@ ORDER BY section, rating_in_section;
   3 |       4 | Заголовок |    79 |                 1
   7 |       4 | Заголовок |    26 |                 2
 
+Основные типы оконных функций:
+
+1. Агрегатные функции (как оконные)
+
+SUM(salary) OVER (PARTITION BY department_id) AS dept_total_salary
+
+AVG(price) OVER (PARTITION BY category_id) AS avg_category_price
+
+2. Ранжирующие функции
+
+ROW_NUMBER() OVER (ORDER BY score DESC) AS rank,
+
+RANK() OVER (PARTITION BY department ORDER BY salary DESC) AS salary_rank,
+
+DENSE_RANK() OVER (ORDER BY total_sales DESC) AS dense_rank
+
+3. Функции смещения
+
+LAG(salary, 1) OVER (PARTITION BY emp_id ORDER BY year) AS prev_salary,
+
+LEAD(price, 1) OVER (ORDER BY date) AS next_day_price,
+
+FIRST_VALUE(name) OVER (PARTITION BY dept ORDER BY hire_date) AS first_hire
+
+4. Аналитические функции
+
+PERCENT_RANK() OVER (ORDER BY sales) AS percentile,
+
+NTILE(4) OVER (ORDER BY salary DESC) AS quartile
+
 ### Связи между таблицами:
 
 - 1 to 1 - одной записи в одной таблице соответствует одна запись в другой таблице.
@@ -514,6 +544,20 @@ PG обеспечивает Durability с помощью Write-Ahead логов 
 Другой критерий:
 - Master-Slave - один главный сервер (Master) и один или несколько подчинённых (Slave). Master принимает все запросы на запись (добавление, изменение, удаление данных), а Slaves только читают данные и получают обновления от Master.
 - Master-Master - у базы данных есть два (или больше) главных сервера, и каждый из них может одновременно принимать и обрабатывать запросы на запись и чтение. Данные между серверами автоматически синхронизируются, чтобы оставаться одинаковыми.
+
+### Миграции
+
+Чтобы наше приложение можно было запустить с 0 на любом устройстве, нужно хранить файлы миграций. В них вы описываете структуру таблиц базы, индексы и прочее. Каждое изменение фиксируется отдельно. Например, файл с начальным видом базы будет называться v000000_init.sql, затем вы добавили какую-то колонку - это уже v000001_add_column.sql и так далее (можно вместо индекса писать timestamp). Перед стартом сервиса с помощью утилиты goose можно запустить миграции, чтобы перевести базу в актуальное состояние. Основные команды:
+- goose up - применить все миграции
+- goose up-to - мигрировать до определённой версии
+- goose up-by-one - мигрировать на следующую версию
+- goose down - мигрировать не версию назад
+- goose down-to - мигрировать назад к определённой версии
+- status, version - статус всех миграций и текущая версия
+
+Можно также использовать liquibase, который описывает всё не в чистом sql, а в XML, но я такое видел только у джавистов
+
+
 ## Cache
 
 Кэширование - хранение часто используемых данных как можно ближе с целью ускорения работы с ними. Можно использовать redis или memcached, можно использовать in-memory.

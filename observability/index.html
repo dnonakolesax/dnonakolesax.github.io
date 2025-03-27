@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VKAT V GO</title>
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.1/styles/github.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 10px 0 10px 0;
+        }
+		img {
+			width: 100%
+		}
+        #html-output {
+            margin-bottom: 20px;
+			margin-left: auto;
+			margin-right: auto;
+			width: 40vw;
+			border: 1px solid gray;
+			border-radius:12px;
+			padding-left: 10px;
+			padding-right: 10px;
+        }
+		
+		@media (max-width: 768px) {
+			#html-output {
+				width: 90vw !important;
+			}
+		}
+    </style>
+</head>
+<body>
+    <div id="html-output"></div>
+	<script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/marked-highlight/lib/index.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.1/highlight.min.js"></script>
+    <script>
+        function convertMarkdown() {
+			const { Marked } = globalThis.marked;
+			const { markedHighlight } = globalThis.markedHighlight;
+            const markdown = `# Observability
+[Назад](https://dnonakolesax.github.io/index.html)
+# Observability
+
+Чтобы ваш сайт не тупил, нужно понимать, что у него там вообще происходит и оперативно реагировать на проблемы. Для этого пишутся логи, метрики и трэйсы.
+Вообще, для отслеживания всего этого существуют девопсы и SRE. Нам, как разработчикам, нужно понимать, что эти люди хотят от нас узнать, и как использовать полученные ими результаты для оптимизации приложения.
+
+## Метрики
+
+Подобно IAST и DAST, метрики можно условно поделить на две группы:
+
+1. Whitebox - показатели внутри системы
+2. Blackbox - показатели, которые видит пользователь
+
+### 4 golden signals + RED + USE
+
+Существует целых три популярных подхода к сбору метрик:
+
+4 golden signals:
+- Latency - задержка или время выполнения запроса
+- Traffic - объём трафика
+- Errors - частота или количество ошибок  
+- Saturation - процент загруженности
+
+RED:
+- Rate - объём трафика
+- Errors - частота или количество ошибок  
+- Duration - время выполнения запроса
+
+USE:
+- Utilization - использование некоторого ресурса (например, процессора)
+- Saturation - в данном случае объём работы, которая стоит в очереди из-за того, что все ресурсы заняты
+- Errors - частота или количество ошибок
+
+Обычно эти подходы комбинируют и добавляют к ним какие-либо бизнесовые метрики, которые зависят от задач, решаемых вашим приложением.
+
+Обычно для метрик подсчитывают квантили. Например, для длительности обработки запроса 50 квантиль показывает, в какое время уложились 50% запросов, а 99 - 99%. 
+
+Существует три основных типа метрик:
+
+1. Counter - монотонно возрастающий счётчик
+2. Gauge - принимает заданное значение в заданный момент времени
+3. Histogram - распределяет значения по временным рядам и считает их количество (столько-то запросов уложилось в 100мс, столько-то в 200мс и т.д.). По ней очень легко посчитать квантиль 
+
+### Prometheus + Node Exporter + Graphana
+
+Стандартный набор для сбора метрик. Prometheus непосредственно подключается в код, где вы создаёте метрики и задаёте их значения. Например, на каждый http-запрос накидывается middleware, который будет считать основные метрики (количество запросов, количество 500 итд). Данные он отдаёт на специальной ручке. От этих же создателей используется Node Exporter, который передаёт данные о состоянии машины (cpu, память и прочее). У всего этого есть очень и очень скудный UI, поэтому для построения красивых и удобных графиков используют Grafana.
+
+## Trace
+
+Мы тут все любим микросервисы, но у них есть и свои сложности. Одна из таких - отслеживание запроса после того как он ушёл в другой сервис. Умные люди придумали использовать для этого специальные заголовки, так что теперь в каждый из сервисов следует накинуть вот такой вот мидлварь:
+
+\`\`\`go
+requestID := r.Header.Get("X-Request-ID")
+if requestID == "" {
+	requestID = randutils.RandBytesHex(16)
+	r.Header.Set("X-Request-ID", requestID)
+	r.Header.Set("trace-id", requestID)
+	w.Header().Set("trace-id", requestID)
+	w.Header().Set("X-Request-ID", requestID)
+}
+ctx := context.WithValue(r.Context(), requestIDKey, requestID)
+r = r.WithContext(ctx)
+next.ServeHTTP(w, r)
+\`\`\`
+
+Соответственно, в каждом логе должен быть этот id, чтобы в случае ошибки можно было воссоздать единую картину произошедшего
+
+### Jaeger
+
+Инструмент, который покажет, как наш запрос ходил по микросервисам и где он сколько был. В основе его работы лежит понятие спан. Спан нужно руками в коде открывать и закрывать. У каждого спана есть:
+
+- Название, обычно это название метода который выполнялся
+- Название сервиса, в котором был сгенерирован спан
+- Собственный уникальный ID
+- Метаинформация
+- Время начала и конца выполнения
+- ID родительского спана    
+
+Все спаны отправляются в соответствии со стандартном OpenTracing, например, в Jaeger
+
+## OpenTelemetry
+
+Когда-то давно существовало два стандарта: opentracing для трейсов и oprncensus для логов, но затем они объединились. Теперь нам нужно поднять промежуточный сервер (otel-collector), в который мы будем по GRPC, в соответствии со стандартом OpenTelemetry, отдавать всё то, что мы насобирали.
+            `
+            const marked = new Marked(
+								  markedHighlight({
+									emptyLangClass: 'hljs',
+									langPrefix: 'hljs language-',
+									highlight(code, lang, info) {
+									  const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+									  return hljs.highlight(code, { language }).value;
+									}
+								  })
+								);
+            const html = marked.parse(markdown);
+            
+            document.getElementById('html-output').innerHTML = html;
+        }
+	convertMarkdown()
+    </script>
+</body>
+</html>          
