@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VKAT V GO</title>
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.1/styles/github.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 10px 0 10px 0;
+        }
+		img {
+			width: 100%
+		}
+        #html-output {
+            margin-bottom: 20px;
+			margin-left: auto;
+			margin-right: auto;
+			width: 40vw;
+			border: 1px solid gray;
+			border-radius:12px;
+			padding-left: 10px;
+			padding-right: 10px;
+        }
+		
+		@media (max-width: 768px) {
+			#html-output {
+				width: 90vw !important;
+			}
+		}
+    </style>
+</head>
+<body>
+    <div id="html-output"></div>
+	<script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/marked-highlight/lib/index.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.1/highlight.min.js"></script>
+    <script>
+        function convertMarkdown() {
+			const { Marked } = globalThis.marked;
+			const { markedHighlight } = globalThis.markedHighlight;
+            const markdown = `# Misc
+
+            ## Шпаргалка по гиту
+
+            ![](https://media2.dev.to/dynamic/image/width=800%2Cheight=%2Cfit=scale-down%2Cgravity=auto%2Cformat=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F8cl1lotlaikqp8vhhr6i.png)
+            
+            ## Гексагональная архитектура 
+
+            ![](https://herbertograca.com/wp-content/uploads/2018/11/100-explicit-architecture-svg.png?w=1200)
+
+            ## Keycloak
+
+            [статья](https://habr.com/ru/companies/alfastrah/articles/651861/)
+
+            ## Oauth 2.0
+
+            [статья](http://habr.com/ru/companies/banki/articles/862516/)
+
+            ## О-оп и прочие мудрые сокращения
+
+            - KISS - Keep it simple, stupid
+            - YAGNI - You aint gonna need it
+            - DRY - Do not repeat yourself
+            - BDUF - Big design up front
+            - APO - Avoid premature optimisation
+
+            SOLID:
+            - Single responsibility - каждый объект, класс и метод должны отвечать только за что-то одно
+            - Open-closed principle - программные объекты должны быть открыты для расширения, но закрыты для модификации.
+            - Liskov's substitution - объекты старших классов должны быть заменимы объектами подклассов, и приложение при такой замене должно работать так, как ожидается
+            - Interface segregation - объекты не должны зависеть от интерфейсов, которые они не используют
+            - Dependency inversion - нужно полагаться на абстракции, а не на конкретные реализации. Компоненты ПО должны иметь низкую связность и высокую согласованность.  
+
+
+            Принципы о-оп:
+
+            - Инкапсуляция
+            - Наследование, делегация, агрегация, композиция
+            - Полиморфизм
+            - Абстракция
+            `
+            const marked = new Marked(
+								  markedHighlight({
+									emptyLangClass: 'hljs',
+									langPrefix: 'hljs language-',
+									highlight(code, lang, info) {
+									  const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+									  return hljs.highlight(code, { language }).value;
+									}
+								  })
+								);
+            const html = marked.parse(markdown);
+            
+            document.getElementById('html-output').innerHTML = html;
+        }
+	convertMarkdown()
+    </script>
+</body>
+</html>          
