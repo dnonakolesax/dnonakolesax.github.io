@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VKAT V GO</title>
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.1/styles/github.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 10px 0 10px 0;
+        }
+		img {
+			width: 100%
+		}
+        #html-output {
+            margin-bottom: 20px;
+			margin-left: auto;
+			margin-right: auto;
+			width: 40vw;
+			border: 1px solid gray;
+			border-radius:12px;
+			padding-left: 10px;
+			padding-right: 10px;
+        }
+		
+		@media (max-width: 768px) {
+			#html-output {
+				width: 90vw !important;
+			}
+		}
+    </style>
+</head>
+<body>
+    <div id="html-output"></div>
+	<script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/marked-highlight/lib/index.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.1/highlight.min.js"></script>
+    <script>
+        function convertMarkdown() {
+			const { Marked } = globalThis.marked;
+			const { markedHighlight } = globalThis.markedHighlight;
+            const markdown = ` # Почему Go не дружил с лимитами контейнеров до версии 1.25
+
+Здравствуйте, мои маленькие любители экстремизма.
+Сегодня мы подробно рассмотрим сотую ошибку из книги "100 ошибок в Go". Разберём подробно, почему так происходит, как её решали существовали раньше, и как она была исправлена в версии 1.25.
+
+Для начала вспомним, в чём суть самой ошибки. Допустим, я хочу создать контейнер в Docker c лимитом в 1.5 cpu и 512 мегабайт памяти:
+
+\`\`\`bash
+docker run -it --memory=512m --cpus=1.5 golang:1.24
+\`\`\`
+
+Запустим простую программу на go и вызовем функцию runtime.GOMAXPROCS(0). Вместо 2 или 1 (количество может быть только целым), получаем ровно столько, сколько выделено на сам докер, в моём случае - 12. Получается, что планировщик Go ничего не знает про ограничение в 1.5cpu, поэтому будет распоряжаться ресурсами, как будто бы у него есть все 12 cpu. 
+Давайте подробно рассмотрим процесс инициализации планировщика. Он реализован в функции [schedinit](https://github.com/golang/go/blob/3a666bca00d7fb30d55e252131ea2cf2006dc3a3/src/runtime/proc.go#L798) в src/runtime/proc.go:
+
+\`\`\`go
+func schedinit() {
+	...
+	procs := ncpu
+	if n, ok := atoi32(gogetenv("GOMAXPROCS")); ok && n > 0 {
+		procs = n
+	}
+	if procresize(procs) != nil {
+		throw("unknown runnable goroutine during bootstrap")
+	}
+	...
+}
+\`\`\`
+Внутри procresize задаётся значение gomaxprocs: [ссылка](https://github.com/golang/go/blob/3a666bca00d7fb30d55e252131ea2cf2006dc3a3/src/runtime/proc.go#L5922)
+\`\`\`go
+func procresize(nprocs int32) *p {
+	...
+	var int32p *int32 = &gomaxprocs // make compiler check that gomaxprocs is an int32
+	atomic.Store((*uint32)(unsafe.Pointer(int32p)), uint32(nprocs))
+	...
+}
+\`\`\`
+
+
+Переменная ncpu опрделяется индивидуально для каждой ОС, так как для её работы необходим системный вызов. Рассмотрим [пример для linux](https://github.com/golang/go/blob/3a666bca00d7fb30d55e252131ea2cf2006dc3a3/src/runtime/os_linux.go#L356) в src/runtime/os_linux.go
+\`\`\`go
+ncpu = getproccount()
+\`\`\`
+\`\`\`go
+func getproccount() int32 {
+	// This buffer is huge (8 kB) but we are on the system stack
+	// and there should be plenty of space (64 kB).
+	// Also this is a leaf, so we're not holding up the memory for long.
+	// See golang.org/issue/11823.
+	// The suggested behavior here is to keep trying with ever-larger
+	// buffers, but we don't have a dynamic memory allocator at the
+	// moment, so that's a bit tricky and seems like overkill.
+	const maxCPUs = 64 * 1024
+	var buf [maxCPUs / 8]byte
+	r := sched_getaffinity(0, unsafe.Sizeof(buf), &buf[0])
+	if r < 0 {
+		return 1
+	}
+	n := int32(0)
+	for _, v := range buf[:r] {
+		for v != 0 {
+			n += int32(v & 1)
+			v >>= 1
+		}
+	}
+	if n == 0 {
+		n = 1
+	}
+	return n
+}
+\`\`\`
+getaffinity - системный вызов, который позволяет получить affinity mask для конкретного процесса. Для нашей программы он вернёт следующий результат:
+
+\`\`\`bash
+taskset -p 27432 # 27432 - id процесса (pid)
+> pid 27432's current affinity mask: fff
+\`\`\`
+
+Что означает этот результат? Давайте переведём fff в двоичную систему счисления. Получим 111111111111. Получается, каждая степень двойки в этом числе отвечает за то, доступен ли конкретный процессор нашему процессу:
+
+|номер процессора|11|10|9|8|7|6|5|4|3|2|1|0|
+|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|доступен процессу?|1|1|1|1|1|1|1|1|1|1|1|1|
+
+Получается, нашему процессу доступны все 12 cpu. Где же тогда прописывается ограничение в 1.5cpu?
+В linux существует функция для изоляции процессоров под названием cgroups (control groups). С её помощью можно ограничивать использование системных ресурсов, в том числе памяти и процессоров. Именно эту функцию и использует docker для ограничения ресурсов контейнера.
+Узнаем id нашего контейнера (например, с помощью docker desktop -> inspect) и убедимся, что ограничение действительно есть. Поскольку основная машина у меня на Windows, необходимо открыть wsl и перейти в директорию /sys/fs/cgroup/docker/<id контейнера>. Нас интересуют файлы cpu.max и memory.max:
+![](https://storage.yandexcloud.net/gpages/cgroups.jpg)
+Действительно, в cpu.max имеем 150000 100000, что в результате деления даёт 1.5. В memory.max видим 512*1024*1024 = 536870912. Теперь проверим, видны ли эти ограничения в самом контейнере. Для этого перейдём в директорию /sys/fs/cgroup и откроем те же самые файлы:
+![](https://storage.yandexcloud.net/gpages/cgroups_cont.jpg)
+Получается, ограничение сработало, но при этом scheduler не в курсе, почему так. Дело в том, что cgroups не закрепляют за процессом конкретные процессоры. Можно исполнять процесс на любом, но только ограниченное время: в нашем случае 1.5/12 (1.5 - ограничение, 12 - всего). 
+
+В этой же директории можно увидеть файл cpu.stat, который содержит параметры nr_throttled(сколько раз планировщик linux снимал процессы контейнера из-за исчерпания лимита) и throttled_usec (сколько времени процессы контейнера висели неактивными из-за исчерпания лимита) ![](https://storage.yandexcloud.net/gpages/cpustat.jpg)
+
+Именно работой с cgroups и занимается библиотека github.com/uber-go/automaxprocs, которая раньше решала задачу определения настоящего лимита процессоров. Можно прочитать её [исходники](https://github.com/uber-go/automaxprocs/tree/master/internal/cgroups) целиком, они несложные (через proc/self получается информация о cgroup процесса, если вы не знакомы с содержимым директории proc/ - тоже следует прочитать).
+
+> Домашнее задание: разобраться чем отличаются cgroups v1 и v2
+
+В Go версии 1.25 наконец-то добавили [взаимодействие с cgroups](https://github.com/golang/go/blob/release-branch.go1.25/src/runtime/cgroup_linux.go). Теперь можно спокойно запускать программы внутри контейнеров с лимитом и gomaxprocs будет автоматически подстраиваться под их значение. Можно убедиться в этом, прочитав [новый код для schedinit](https://github.com/golang/go/blob/79ec0c94f32b0fedd0a4e9aacbe0b305b2a66762/src/runtime/proc.go#L916):
+
+\`\`\`go
+func schedinit() {
+	...
+	defaultGOMAXPROCSInit()
+	...
+	var procs int32
+	if n, ok := strconv.Atoi32(gogetenv("GOMAXPROCS")); ok && n > 0 {
+		procs = n
+		sched.customGOMAXPROCS = true
+	} else {
+		// Use numCPUStartup for initial GOMAXPROCS for two reasons:
+		//
+		// 1. We just computed it in osinit, recomputing is (minorly) wasteful.
+		//
+		// 2. More importantly, if debug.containermaxprocs == 0 &&
+		//    debug.updatemaxprocs == 0, we want to guarantee that
+		//    runtime.GOMAXPROCS(0) always equals runtime.NumCPU (which is
+		//    just numCPUStartup).
+		procs = defaultGOMAXPROCS(numCPUStartup)
+	}
+	...
+}
+\`\`\`
+
+Функции defaultGOMAXPROCSInit и defaultGOMAXPROCS как раз находятся в [новом файле](https://github.com/golang/go/blob/79ec0c94f32b0fedd0a4e9aacbe0b305b2a66762/src/runtime/cgroup_linux.go#L45)
+
+Подкапотку работы с cgroups можно почитать [здесь](https://github.com/golang/go/blob/release-branch.go1.25/src/internal/runtime/cgroup/cgroup_linux.go), но там нет ничего нового, кроме работы с уже знакомыми нам файлами. 
+            `
+            const marked = new Marked(
+								  markedHighlight({
+									emptyLangClass: 'hljs',
+									langPrefix: 'hljs language-',
+									highlight(code, lang, info) {
+									  const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+									  return hljs.highlight(code, { language }).value;
+									}
+								  })
+								);
+            const html = marked.parse(markdown);
+            
+            document.getElementById('html-output').innerHTML = html;
+        }
+	convertMarkdown()
+    </script>
+</body>
+</html>          
