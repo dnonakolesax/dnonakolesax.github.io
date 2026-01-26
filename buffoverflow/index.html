@@ -42,7 +42,9 @@
 			const { markedHighlight } = globalThis.markedHighlight;
             const markdown = `# Как компилятор и система защищают разработчиков от выстрелов в ноги
 
-Подготовка статьи про [CWE](dnonakolesax.github.io/TODO) показала, что классические для C/C++ и прочих memory-unsafe языков уязвимости всё ещё являются одними из самых популярных. По состоянию на 2025 год, к ним относятся:
+[Назад](https://dnonakolesax.github.io/index.html)
+
+Подготовка блока про [основы безопасности](dnonakolesax.github.io/sec) показала, что классические для C/C++ и прочих memory-unsafe языков уязвимости всё ещё являются одними из самых популярных. По состоянию на 2025 год, к ним относятся:
 - 5 место - CWE-787 Out-of-bounds Write (в 2024 - 3 место)
 - 7 место - CWE-416 Use After Free (в 2024 - 8 место)
 - 8 место - CWE-125 Out-of-bounds Read (в 2024 - 6 место)
@@ -1156,7 +1158,9 @@ int main(void) {
     return 0;
 }
 \`\`\`
-cc -O2 -D_FORTIFY_SOURCE=1 -fno-stack-protector l1.c -o t1                                                        SEGV ✘  root@ae8c878e960a  20:05:05 ▓▒░
+\`\`\`
+gcc -O2 -D_FORTIFY_SOURCE=1 -fno-stack-protector l1.c -o t1           
+
 In file included from /usr/include/string.h:548,
                  from l1.c:1:
 In function 'memcpy',
@@ -1174,7 +1178,7 @@ In function 'memcpy',
 [1]    73790 IOT instruction  ./t1
 \`\`\`
 
-Пример для второго уровня. Eровень 1 может считать размер всего объекта, а уровень 2 - более строгий, учитывает вложенный буфер:
+Пример для второго уровня. Уровень 1 может считать размер всего объекта, а уровень 2 - более строгий, учитывает вложенный буфер:
 
 \`\`\`c
 #include <string.h>
